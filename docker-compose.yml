@@ -1,0 +1,173 @@
+services:
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: accounting-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: accounting
+      POSTGRES_USER: ${DB_USERNAME:-accounting_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-accounting_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - accounting-network
+
+  # ── Cache ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: accounting-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - accounting-network
+
+  # ── DB Admin UI ─────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: accounting-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-mfolee@gmail.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - accounting-network
+
+  # ── Object Storage (MinIO) ──────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: accounting-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console  (open http://localhost:9001)
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - accounting-network
+
+  # ── Backend (Spring Boot) ───────────────────────────────────────────────────
+  # Scale with:  docker compose up --scale app=3 -d
+  # container_name is intentionally absent so Docker can create named replicas.
+  # Port 8080 is NOT exposed to the host — all external traffic goes through nginx.
+  app:
+    build:
+      context: ./fa-backend
+      dockerfile: Dockerfile
+    image: qesuite/accounting:latest
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/accounting
+      DB_USERNAME: ${DB_USERNAME:-accounting_user}
+      DB_PASSWORD: ${DB_PASSWORD:-accounting_pass}
+
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+
+      SERVER_PORT: 8080
+
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-a-32char-random-key}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-2592000000}
+
+      # Storage — set STORAGE_TYPE=minio to use MinIO; default is local disk
+      APP_STORAGE_TYPE: ${STORAGE_TYPE:-minio}
+      APP_STORAGE_MINIO_ENDPOINT: http://minio:9000
+      APP_STORAGE_MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      APP_STORAGE_MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      APP_STORAGE_MINIO_BUCKET: ${MINIO_BUCKET:-qesuite-documents}
+
+      # Email — set MAIL_ENABLED=true and configure SMTP to activate
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-noreply@qesuite.com}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
+
+      JAVA_OPTS: >-
+        -Xms512m
+        -Xmx1024m
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=200
+    networks:
+      - accounting-network
+
+  # ── Frontend (Vue → nginx static serve) ─────────────────────────────────────
+  frontend:
+    build:
+      context: ./fa-frontend
+      dockerfile: Dockerfile
+    image: qesuite/accounting-frontend:latest
+    restart: unless-stopped
+    networks:
+      - accounting-network
+
+  # ── Nginx (reverse proxy + load balancer) ───────────────────────────────────
+  # Routes:
+  #   /api/      → upstream backend  (round-robin across all app replicas)
+  #   /v3/       → backend           (OpenAPI docs)
+  #   /actuator/ → backend           (health / metrics)
+  #   /          → frontend          (Vue SPA static files)
+  nginx:
+    image: nginx:stable-alpine
+    container_name: accounting-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+      - frontend
+    networks:
+      - accounting-network
+
+volumes:
+  postgres_data:
+    external: true
+  redis_data:
+  pgadmin_data:
+  minio_data:
+
+networks:
+  accounting-network:
+    driver: bridge

@@ -1,0 +1,416 @@
+QeSuite FA — Complete Backend Gap Analysis & Integration Plan
+
+  Stack confirmed: Kotlin + Spring Boot 3.3 · Spring Data JPA · PostgreSQL · Flyway
+  Assessment: Backend is ~82% ready. Core accounting engine is solid. Gaps are real but bounded.
+
+  ---
+  Part 1 — What the Backend Has (Confirmed Endpoints)
+
+  ┌─────────────────┬───────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │     Module      │                                             Endpoints                                             │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Auth            │ POST login, register, refresh, logout, change-password, forgot-password, reset-password,          │
+  │                 │ verify-email                                                                                      │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Users           │ POST create, GET list, GET by id, PUT role, PUT profile, POST deactivate, POST reset-password     │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Organization    │ POST create, GET list (admin), GET by id (admin), PUT, POST suspend, POST activate                │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ API Keys        │ POST create, GET list, GET by id, POST revoke, POST rotate                                        │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Chart of        │ POST, GET, GET by id, PUT, POST deactivate, GET hierarchy, GET balance, GET templates, POST       │
+  │ Accounts        │ import, POST validate-code                                                                        │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Periods         │ GET list, GET by id, POST generate-fiscal-year, POST transition                                   │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Accounting      │ POST run, POST transition, GET validate-step                                                      │
+  │ Cycle           │                                                                                                   │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Source          │ POST, GET, GET by id, PUT, POST submit/review/approve/archive/void, POST classify                 │
+  │ Documents       │                                                                                                   │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Journal Entries │ POST, GET, GET by id, PUT, POST submit/approve/reject/reverse, GET audit-trail                    │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Adjustments     │ POST accruals, deferrals, prepayments/amortize, unearned/recognize                                │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Closing         │ POST run, POST reopen                                                                             │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Invoices        │ POST, GET, GET by id, POST approve/void/credit-note/payment, GET ar-ageing                        │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Payments        │ POST, GET, GET by id, POST match/approve/post/reverse, POST mpesa/callback                        │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Receipts        │ POST generate, GET, GET by id, POST issue/void, GET by-payment                                    │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Customers       │ POST, GET, GET by id, PUT, POST deactivate                                                        │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Suppliers       │ POST, GET, GET by id, PUT, POST deactivate                                                        │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Assets          │ POST, GET, GET by id, POST dispose, POST depreciation/run                                         │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Ledger          │ GET account entries, T-account, GET entry, GET subsidiary (customer/supplier/asset), POST         │
+  │                 │ depreciate                                                                                        │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Trial Balance   │ GET (all 3 types), GET comparative (stub — returns Unit)                                          │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Statements      │ GET balance-sheet, profit-loss, cash-flow                                                         │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ FX              │ POST/GET currencies, POST/GET exchange-rates, POST revaluation                                    │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Tax             │ POST/GET codes, GET code by id, POST/GET rates, POST calculate                                    │
+  ├─────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Compliance      │ GET ias1                                                                                          │
+  └─────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  ---
+  Part 2 — The 4 User-Identified Gaps (Now Verified)
+
+  GAP 1 ✗ — Global Approvals Queue (Inbox)
+
+  Verified state: Approval actions exist per-module (POST /journal-entries/{id}/approve, /invoices/{id}/approve,
+  /payments/{id}/approve, /source-documents/{id}/approve). There is zero aggregation — no repository query, no service
+  method, no controller that collects PENDING_APPROVAL items across modules.
+
+  Frontend impact: Dashboard.vue approval queue card and the full Approvals.vue view both need a single endpoint returning
+  pending items from all modules, typed so the UI can route the approve/reject action back to the right module endpoint.
+
+  What needs building:
+  GET /api/v1/approvals
+    ?type=JOURNAL|INVOICE|PAYMENT|SOURCE_DOC   (optional filter)
+    &assignedTo=me                              (optional — only items I can approve)
+
+  Response: {
+    total: 12,
+    items: [
+      { id, type: "JOURNAL_ENTRY", ref, title, amount, currency,
+        submittedBy, submittedAt, status: "PENDING_APPROVAL",
+        approveUrl: "/api/v1/journal-entries/{id}/approve",
+        rejectUrl:  "/api/v1/journal-entries/{id}/reject" }
+    ]
+  }
+
+  Implementation approach: a new GlobalApprovalController with an ApprovalAggregatorService that runs 4 repository queries
+  (journals, invoices, payments, source docs) filtered by status = PENDING_APPROVAL and entityId = caller's org, then merges
+   and sorts by submittedAt desc.
+
+  ---
+  GAP 2 ✗ — Dashboard Analytics & Sparklines
+
+  Verified state: Zero files match "dashboard", "analytics", "sparkline", "timeSeries", "trend". Statements endpoints return
+   current-period snapshots only. The ledger has full transaction history but no aggregation layer over it.
+
+  Frontend impact: Dashboard.vue uses 4 sparklines (SPARK_CASH, SPARK_AR, SPARK_REV, SPARK_EXP) — each is a 12-point monthly
+   series — plus 4 KPI cards with delta-vs-prior-month. The revenue chart needs 12 months of monthly totals for two series.
+  All of this is currently hardcoded in data/index.js.
+
+  What needs building:
+  GET /api/v1/analytics/dashboard
+    ?periodCount=12      (trailing N months)
+
+  Response: {
+    kpis: {
+      cash:       { value: 2713620, delta: +4.2, unit: "KES" },
+      ar:         { value: 1840000, delta: +2.8, unit: "KES" },
+      mtdRevenue: { value: 2170200, delta: +9.9, unit: "KES" },
+      opExpenses: { value: 946800,  delta: -3.1, unit: "KES" }
+    },
+    sparklines: {
+      cash:     [1510000, 1620000, ...],   // 12 monthly closing balances
+      ar:       [1200000, 1320000, ...],
+      revenue:  [320000,  410000,  ...],
+      expenses: [180000,  220000,  ...]
+    },
+    revenueChart: {
+      labels:   ["M03","M04",...,"FEB"],
+      revenue:  [...],
+      expenses: [...]
+    }
+  }
+
+  Implementation approach: DashboardController → AnalyticsService that queries the journal_entry_lines table grouped by
+  account class and calendar month. Cash = account 1-0xxx closing balance per month. AR = account 1-1xxx. Revenue = credit
+  postings to class REVENUE. Expenses = debit postings to class EXPENSE.
+
+  ---
+  GAP 3 ⚠ — Global Audit Trail Browser
+
+  Verified state: Infrastructure is excellent. AuditLog entity captures: userId, action (enum:
+  CREATE/UPDATE/DELETE/POST/REVERSE/APPROVE/REJECT/CLOSE/REOPEN/EXPORT/TAX_ADJUSTMENT), resourceType, resourceId,
+  payloadBefore, payloadAfter, clientIp. Written via AOP @Auditable aspect with REQUIRES_NEW propagation (survives
+  rollback). Indexed on (resource_type, resource_id) and entity_id.
+
+  What's missing: Only the controller endpoint. The repository already has findAllByEntityIdOrderByCreatedAtDesc(). This is
+  the smallest gap — one controller method and a response DTO.
+
+  What needs building:
+  GET /api/v1/audit-logs
+    ?resourceType=JOURNAL_ENTRY|INVOICE|PAYMENT|...
+    &actorId={userId}
+    &action=POST|APPROVE|REJECT|...
+    &from=2026-01-01&to=2026-03-01
+    &page=0&size=50
+
+  Response: {
+    total: 420,
+    items: [
+      { id, ts, actor: "w.njeri", action: "APPROVE",
+        resourceType: "JOURNAL_ENTRY", resourceId,
+        ref: "JE-2026-0042", detail: "...",
+        clientIp: "41.90.x.x" }
+    ]
+  }
+
+  Roles: AUDITOR, SENIOR_ACCOUNTANT, SYSTEM_ADMIN only.
+
+  ---
+  GAP 4 ⚠ — Active Session Management
+
+  Verified state: RefreshToken entity already stores userAgent (500 chars), clientIp (45 chars), issuedAt, expiresAt,
+  revokedAt. Refresh token rotation is implemented (RFC 6749). POST /logout revokes ALL sessions. Repository has
+  findByUserId() and revokeAllByUser(). Only the list/revoke-individual endpoints are missing from the controller.
+
+  What needs building:
+  GET  /api/v1/auth/sessions          — list active (non-revoked, non-expired) sessions
+  DELETE /api/v1/auth/sessions/{id}   — revoke a specific session (not current)
+  POST /api/v1/auth/sessions/revoke-all-others — revoke all except current
+
+  These map directly onto existing repository methods. The Security.vue "This device" indicator needs the current session's
+  token ID returned in the /login and /refresh responses.
+
+  ---
+  Part 3 — Complete Gap Inventory (All Sources Combined)
+
+  Tier 1 — Blocks core UI (build first)
+
+  ┌─────┬─────────────────────────────────────────┬──────────────────────────────────┬─────────────────────────────────┐
+  │  #  │                Endpoint                 │              Module              │           Why Urgent            │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 1   │ GET /api/v1/analytics/dashboard         │ New: DashboardController         │ Powers the entire landing page  │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 2   │ GET /api/v1/approvals                   │ New: GlobalApprovalController    │ Approvals queue on dashboard +  │
+  │     │                                         │                                  │ Approvals view                  │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 3   │ GET /api/v1/audit-logs                  │ New: GlobalAuditController (1    │ AuditTrail.vue is blank without │
+  │     │                                         │ method)                          │  it                             │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 4   │ GET /organizations/me, PUT              │ Fix RBAC on existing endpoints   │ Org setup blocks regular ADMIN  │
+  │     │ /organizations/me                       │                                  │ users                           │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 5   │ PUT /api/v1/assets/{id}                 │ Add to AssetController           │ Edit button has no target       │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 6   │ PUT /api/v1/tax/codes/{id}              │ Add to TaxController             │ Edit button has no target       │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 7   │ PUT /api/v1/fx/currencies/{id}          │ Add to FxController              │ Edit button has no target       │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 8   │ PUT /api/v1/fx/exchange-rates/{id}      │ Add to FxController              │ Edit button has no target       │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 9   │ POST /api/v1/users/{id}/reactivate      │ Add to UserController            │ Toggle has no return path       │
+  ├─────┼─────────────────────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+  │ 10  │ GET /api/v1/trial-balance/comparative   │ Complete stub in                 │ Returns Unit today              │
+  │     │                                         │ TrialBalanceController           │                                 │
+  └─────┴─────────────────────────────────────────┴──────────────────────────────────┴─────────────────────────────────┘
+
+  Tier 2 — Significant UX gaps (build second)
+
+  ┌─────┬─────────────────────────────────────────────────┬───────────────────────────────────────────┐
+  │  #  │                    Endpoint                     │                   Notes                   │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 11  │ GET /api/v1/auth/sessions                       │ Session list for Security.vue             │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 12  │ DELETE /api/v1/auth/sessions/{id}               │ Per-session revoke                        │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 13  │ POST /api/v1/auth/sessions/revoke-all-others    │ Keep current, revoke others               │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 14  │ GET /api/v1/credit-notes, POST, GET /{id}       │ CreditNotes view needs standalone list    │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 15  │ GET /api/v1/closing/preview                     │ Gate check before posting closing entries │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 16  │ POST /api/v1/source-documents/{id}/restore      │ Void/archive reversal                     │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 17  │ POST /api/v1/source-documents/bulk-upload       │ File upload infrastructure needed         │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 18  │ POST /api/v1/invoices/ar-ageing/send-statements │ AR bulk email (needs email infra)         │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 19  │ POST /api/v1/receipts/{id}/resend               │ Depends on email infra                    │
+  ├─────┼─────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ 20  │ GET /api/v1/payments/mpesa/callbacks            │ M-Pesa log view                           │
+  └─────┴─────────────────────────────────────────────────┴───────────────────────────────────────────┘
+
+  Tier 3 — Infrastructure (plan separately)
+
+  ┌─────────────────────────────┬────────┬────────────────────────────────────────────────────────┐
+  │           Feature           │ Effort │                         Blocks                         │
+  ├─────────────────────────────┼────────┼────────────────────────────────────────────────────────┤
+  │ Email dispatch (SMTP/SES)   │ Medium │ Password reset, invites, receipts, AR statements       │
+  ├─────────────────────────────┼────────┼────────────────────────────────────────────────────────┤
+  │ File/attachment storage     │ Medium │ Source doc bulk upload, attachments                    │
+  ├─────────────────────────────┼────────┼────────────────────────────────────────────────────────┤
+  │ PDF generation              │ Medium │ Invoice/receipt/journal download                       │
+  ├─────────────────────────────┼────────┼────────────────────────────────────────────────────────┤
+  │ External FX rate feed       │ Small  │ "Refresh rates" button                                 │
+  ├─────────────────────────────┼────────┼────────────────────────────────────────────────────────┤
+  │ Background job queue        │ Large  │ Depreciation batch, FX reval, closing at scale         │
+  ├─────────────────────────────┼────────┼────────────────────────────────────────────────────────┤
+  │ AP/Payables module          │ Large  │ Full supplier invoice lifecycle                        │
+  ├─────────────────────────────┼────────┼────────────────────────────────────────────────────────┤
+  │ Idempotency middleware      │ Small  │ Double-submission protection on all mutating endpoints │
+  ├─────────────────────────────┼────────┼────────────────────────────────────────────────────────┤
+  │ Historical period snapshots │ Medium │ Comparative statements accuracy over time              │
+  ├─────────────────────────────┼────────┼────────────────────────────────────────────────────────┤
+  │ COA template seed data      │ Small  │ Signup wizard COA selector returns empty list          │
+  └─────────────────────────────┴────────┴────────────────────────────────────────────────────────┘
+
+  ---
+  Part 4 — Demo Mode / Production Mode Architecture
+
+  This is a critical cross-cutting concern that must be designed before any integration begins. Every fetch() call in the
+  frontend must be mode-aware.
+
+  Design: useAppMode composable + Organization setting
+
+  How it works:
+  - The Organization profile page has a Demo / Production toggle
+  - The selected mode is persisted in localStorage (survives refresh, scoped per browser)
+  - A central composable useAppMode() exposes the current mode
+  - Every data-fetching call goes through a single API layer (src/api/) that the composable governs — in Demo mode it
+  returns static data from data/index.js, in Production mode it calls the real backend
+
+  src/
+  ├── composables/
+  │   └── useAppMode.js          ← single source of truth for mode
+  ├── api/
+  │   ├── index.js               ← barrel: re-exports all resource APIs
+  │   ├── journals.js            ← getJournals(), createJournal(), etc.
+  │   ├── invoices.js
+  │   ├── dashboard.js
+  │   ├── approvals.js
+  │   └── ...                    ← one file per resource
+  └── data/
+      └── index.js               ← untouched demo data (current file)
+
+  useAppMode.js:
+  import { ref, readonly } from 'vue'
+
+  const DEMO = 'demo'
+  const PROD = 'production'
+  const _mode = ref(localStorage.getItem('qsuite_mode') || DEMO)
+
+  export function useAppMode() {
+    function setMode(m) {
+      _mode.value = m
+      localStorage.setItem('qsuite_mode', m)
+    }
+    return {
+      mode: readonly(_mode),
+      isDemo: computed(() => _mode.value === DEMO),
+      isProd: computed(() => _mode.value === PROD),
+      setMode,
+    }
+  }
+
+  Example API module (src/api/journals.js):
+  import { useAppMode } from '@/composables/useAppMode'
+  import { JOURNALS } from '@/data/index.js'
+
+  const BASE = import.meta.env.VITE_API_BASE_URL
+
+  export async function getJournals(params = {}) {
+    const { isDemo } = useAppMode()
+    if (isDemo.value) return { data: JOURNALS, total: JOURNALS.length }
+    const res = await fetch(`${BASE}/api/v1/journal-entries?${new URLSearchParams(params)}`, {
+      headers: authHeaders()
+    })
+    return res.json()
+  }
+
+  export async function approveJournal(id) {
+    const { isDemo } = useAppMode()
+    if (isDemo.value) return { success: true }   // no-op in demo
+    const res = await fetch(`${BASE}/api/v1/journal-entries/${id}/approve`, {
+      method: 'POST', headers: authHeaders()
+    })
+    return res.json()
+  }
+
+  Organization profile toggle (in Organization.vue):
+  <div class="card-head">
+    <Ico name="branch" :size="13" /> Environment
+    <div class="h-meta">
+      <Badge :status="isDemo ? 'warn' : 'approved'" :dot="false">
+        {{ isDemo ? 'Demo Mode' : 'Production' }}
+      </Badge>
+    </div>
+  </div>
+  <div class="card-body">
+    <p class="muted" style="font-size:12px">
+      Demo mode uses built-in sample data. Switch to Production to connect
+      to the live backend.
+    </p>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <Button :variant="isDemo ? 'primary' : 'ghost'" @click="setMode('demo')">Demo</Button>
+      <Button :variant="isProd ? 'primary' : 'ghost'" @click="setMode('production')">Production</Button>
+    </div>
+  </div>
+
+  ---
+  Part 5 — Recommended Build Sequence
+
+  Phase 0 — Foundation (before any integration)
+    ├── Build useAppMode composable + src/api/ skeleton
+    ├── Wire Organization profile Demo/Production toggle
+    └── Add VITE_API_BASE_URL to .env files
+
+  Phase 1 — Dashboard & Approvals (highest user-visible value)
+    ├── Backend: DashboardController (GET /analytics/dashboard)
+    ├── Backend: GlobalApprovalController (GET /approvals)
+    ├── Frontend: replace SPARK_* and KPI hardcodes with api/dashboard.js
+    └── Frontend: replace APPROVALS array with api/approvals.js
+
+  Phase 2 — CRUD completeness (unblock all UI buttons)
+    ├── Backend: PUT /assets/{id}, PUT /tax/codes/{id}, PUT /fx/currencies/{id}, PUT /fx/rates/{id}
+    ├── Backend: POST /users/{id}/reactivate
+    ├── Backend: Fix /organizations/me RBAC
+    └── Frontend: wire each edit form to its API module
+
+  Phase 3 — Audit & Sessions
+    ├── Backend: GET /audit-logs (GlobalAuditController)
+    ├── Backend: GET /auth/sessions, DELETE /sessions/{id}, POST /sessions/revoke-all-others
+    └── Frontend: wire AuditTrail.vue and Security.vue
+
+  Phase 4 — Remaining workflow gaps
+    ├── Backend: GET /trial-balance/comparative (complete stub)
+    ├── Backend: GET /closing/preview
+    ├── Backend: GET/POST /credit-notes (standalone)
+    └── Backend: POST /source-documents/{id}/restore
+
+  Phase 5 — Infrastructure
+    ├── Email dispatch (unlocks: invites, receipts, AR statements)
+    ├── File storage (unlocks: source doc attachments)
+    └── PDF generation (unlocks: download buttons)
+
+  Phase 6 — AP Module (separate milestone)
+
+  ---
+  Summary Scorecard
+
+  ┌─────────────────────────────────┬──────────────────────────────────────────┐
+  │            Category             │                  Count                   │
+  ├─────────────────────────────────┼──────────────────────────────────────────┤
+  │ Endpoints fully implemented ✓   │ 72                                       │
+  ├─────────────────────────────────┼──────────────────────────────────────────┤
+  │ Endpoints with RBAC gap ⚠       │ 2                                        │
+  ├─────────────────────────────────┼──────────────────────────────────────────┤
+  │ Stubs returning nothing ⚠       │ 1                                        │
+  ├─────────────────────────────────┼──────────────────────────────────────────┤
+  │ Endpoints completely missing ✗  │ 21                                       │
+  ├─────────────────────────────────┼──────────────────────────────────────────┤
+  │ New controllers needed (Tier 1) │ 3 (Dashboard, Approvals, Audit)          │
+  ├─────────────────────────────────┼──────────────────────────────────────────┤
+  │ Infrastructure verticals absent │ 6 (email, files, PDF, FX feed, jobs, AP) │
+  ├─────────────────────────────────┼──────────────────────────────────────────┤
+  │ Backend readiness               │ ~82%                                     │
+  └─────────────────────────────────┴──────────────────────────────────────────┘
+
+  ---
+  Shall I proceed with Phase 0 — building the useAppMode composable, the src/api/ skeleton, and wiring the Demo/Production
+  toggle into the Organization profile? That sets the foundation so every subsequent phase can be integrated without
+  restructuring the frontend.

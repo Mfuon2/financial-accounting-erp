@@ -1,0 +1,316 @@
+package com.qesuite.accounting.journal.service
+
+import com.qesuite.accounting.ap.service.PeriodService
+import com.qesuite.accounting.journal.domain.JournalEntry
+import com.qesuite.accounting.journal.domain.JournalEntryLine
+import com.qesuite.accounting.journal.domain.JournalEntryStatus
+import com.qesuite.accounting.journal.repository.JournalEntryRepository
+import com.qesuite.accounting.ledger.service.PostingService
+import com.qesuite.accounting.shared.audit.annotation.AuditResourceId
+import com.qesuite.accounting.shared.audit.annotation.Auditable
+import com.qesuite.accounting.shared.audit.domain.AuditAction
+import com.qesuite.accounting.shared.audit.domain.AuditLog
+import com.qesuite.accounting.shared.audit.repository.AuditLogRepository
+import com.qesuite.accounting.shared.codegen.service.CodeGeneratorService
+import com.qesuite.accounting.shared.codegen.service.EntityNumberConfigService
+import com.qesuite.accounting.shared.exceptions.ImmutableRecordException
+import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
+import com.qesuite.accounting.shared.exceptions.ValidationException
+import io.swagger.v3.oas.annotations.media.Schema
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
+import java.time.LocalDate
+import java.util.*
+
+@Service
+class JournalService(
+    private val journalEntryRepository: JournalEntryRepository,
+    private val postingService: PostingService,
+    private val doubleEntryValidator: com.qesuite.accounting.journal.service.DoubleEntryValidator,
+    private val auditLogRepository: AuditLogRepository,
+    private val periodService: PeriodService,
+    private val codeGeneratorService: CodeGeneratorService,
+    private val numberConfigService: EntityNumberConfigService,
+) {
+
+    @Transactional
+    @Auditable(action = AuditAction.CREATE, resourceType = "JOURNAL_ENTRY")
+    fun createEntry(command: CreateJournalEntryCommand): JournalEntry {
+        val cfg = numberConfigService.resolveConfig(command.entityId, "JOURNAL_ENTRY")
+        val reference = command.reference?.takeIf { it.isNotBlank() }
+            ?: codeGeneratorService.nextUniqueForConfig(command.entityId, cfg) { code ->
+                !journalEntryRepository.existsByEntityIdAndReference(command.entityId, code)
+            }
+        val entry = JournalEntry(
+            entityId = command.entityId,
+            periodId = command.periodId,
+            reference = reference,
+            transDate = command.transDate,
+            description = command.description,
+            sourceType = command.sourceType,
+            sourceId = command.sourceId
+        )
+
+        command.lines.forEach { lineCommand ->
+            val line = JournalEntryLine(
+                accountId       = lineCommand.accountId,
+                description     = lineCommand.description,
+                debitAmount     = lineCommand.debitAmount,
+                creditAmount    = lineCommand.creditAmount,
+                currencyCode    = lineCommand.currencyCode,
+                exchangeRate    = lineCommand.exchangeRate,
+                functionalDebit = lineCommand.debitAmount.multiply(lineCommand.exchangeRate),
+                functionalCredit= lineCommand.creditAmount.multiply(lineCommand.exchangeRate),
+                taxCode         = lineCommand.taxCode,
+                taxAmount       = lineCommand.taxAmount
+            )
+            entry.addLine(line)
+        }
+
+        return journalEntryRepository.save(entry)
+    }
+
+    @Transactional
+    @Auditable(action = AuditAction.POST, resourceType = "JOURNAL_ENTRY")
+    fun postEntry(@AuditResourceId entryId: UUID) {
+        val entry = findById(entryId)
+
+        if (entry.status == JournalEntryStatus.POSTED) {
+            throw ValidationException("ALREADY_POSTED", "Journal entry $entryId is already posted.")
+        }
+
+        // Enforce state machine — only PENDING_APPROVAL can be posted
+        if (entry.status != JournalEntryStatus.PENDING_APPROVAL) {
+            throw ValidationException(
+                errorCode = "INVALID_STATE_TRANSITION",
+                message = "Journal entry must be in PENDING_APPROVAL status before posting. " +
+                    "Current status: ${entry.status}. Submit the entry first via POST /journal-entries/{id}/submit.",
+                context = mapOf(
+                    "entry_id" to entryId,
+                    "current_status" to entry.status.name,
+                    "required_status" to JournalEntryStatus.PENDING_APPROVAL.name
+                )
+            )
+        }
+
+        doubleEntryValidator.validate(entry)
+        postingService.postJournalEntry(entry)
+        entry.status = JournalEntryStatus.POSTED
+        journalEntryRepository.save(entry)
+    }
+
+    /**
+     * System-initiated post — bypasses approval workflow requirement.
+     * Use ONLY for entries generated by the system (invoicing, payments, closing, depreciation).
+     * Human-created entries MUST go through the submit → approve workflow.
+     */
+    @Transactional
+    fun postEntryAsSystem(entryId: UUID) {
+        val entry = findById(entryId)
+        if (entry.status == JournalEntryStatus.POSTED) {
+            throw ValidationException("ALREADY_POSTED", "Journal entry $entryId is already posted.")
+        }
+        doubleEntryValidator.validate(entry)
+        postingService.postJournalEntry(entry)
+        entry.status = JournalEntryStatus.POSTED
+        journalEntryRepository.save(entry)
+    }
+
+    @Transactional
+    @Auditable(action = AuditAction.UPDATE, resourceType = "JOURNAL_ENTRY")
+    fun updateEntry(@AuditResourceId entryId: UUID, command: CreateJournalEntryCommand): JournalEntry {
+        val entry = findById(entryId)
+        if (entry.status == JournalEntryStatus.POSTED) {
+            throw ImmutableRecordException(
+                message = "Posted journal entries cannot be modified (§3.4). Use a reversing entry.",
+                resourceType = "JOURNAL_ENTRY",
+                resourceId = entryId
+            )
+        }
+        entry.description = command.description
+        entry.transDate = command.transDate
+        entry.clearLines()
+        command.lines.forEach { lineCommand ->
+            val line = JournalEntryLine(
+                accountId        = lineCommand.accountId,
+                description      = lineCommand.description,
+                debitAmount      = lineCommand.debitAmount,
+                creditAmount     = lineCommand.creditAmount,
+                currencyCode     = lineCommand.currencyCode,
+                exchangeRate     = lineCommand.exchangeRate,
+                functionalDebit  = lineCommand.debitAmount.multiply(lineCommand.exchangeRate),
+                functionalCredit = lineCommand.creditAmount.multiply(lineCommand.exchangeRate),
+                taxCode          = lineCommand.taxCode,
+                taxAmount        = lineCommand.taxAmount
+            )
+            entry.addLine(line)
+        }
+        return journalEntryRepository.save(entry)
+    }
+
+    @Transactional
+    @Auditable(action = AuditAction.DELETE, resourceType = "JOURNAL_ENTRY")
+    fun deleteEntry(@AuditResourceId entryId: UUID) {
+        val entry = findById(entryId)
+        if (entry.status == JournalEntryStatus.POSTED) {
+            throw ImmutableRecordException(
+                message = "Posted journal entries cannot be deleted (§3.4).",
+                resourceType = "JOURNAL_ENTRY",
+                resourceId = entryId
+            )
+        }
+        journalEntryRepository.delete(entry)
+    }
+
+    @Transactional(readOnly = true)
+    fun getAllEntries(entityId: UUID): List<JournalEntry> {
+        return journalEntryRepository.findByEntityId(entityId)
+    }
+
+    @Transactional
+    @Auditable(action = AuditAction.UPDATE, resourceType = "JOURNAL_ENTRY")
+    fun submitEntry(@AuditResourceId entryId: UUID) {
+        val entry = findById(entryId)
+        if (entry.status != JournalEntryStatus.DRAFT) {
+            throw ValidationException("INVALID_STATUS", "Only DRAFT entries can be submitted.")
+        }
+        doubleEntryValidator.validate(entry)
+        entry.status = JournalEntryStatus.PENDING_APPROVAL
+        journalEntryRepository.save(entry)
+    }
+
+    @Transactional
+    @Auditable(action = AuditAction.REJECT, resourceType = "JOURNAL_ENTRY")
+    fun rejectEntry(@AuditResourceId entryId: UUID, reason: String) {
+        val entry = findById(entryId)
+        if (entry.status != JournalEntryStatus.PENDING_APPROVAL) {
+            throw ValidationException("INVALID_STATUS", "Only PENDING_APPROVAL entries can be rejected.")
+        }
+        entry.status = JournalEntryStatus.DRAFT
+        // Append the rejection reason to the description so it is preserved on the
+        // entry itself and visible in any journal listing — no schema change required.
+        entry.description = "[REJECTED: $reason] ${entry.description.orEmpty()}".trim()
+        journalEntryRepository.save(entry)
+    }
+
+    /**
+     * §4.3 — IAS 8 compliant reversal. Creates a new DRAFT reversing entry with all
+     * debit/credit amounts flipped, immediately posts it, and marks the original REVERSED.
+     * The original entry is preserved immutably for audit trail purposes.
+     *
+     * IAS 8: reversals are posted in the current open period, not backdated to the
+     * original period.
+     *
+     * Returns the NEW reversing journal entry.
+     */
+    @Transactional
+    @Auditable(action = AuditAction.REVERSE, resourceType = "JOURNAL_ENTRY")
+    fun reverseEntry(@AuditResourceId entryId: UUID): JournalEntry {
+        val original = findById(entryId)
+        if (original.status != JournalEntryStatus.POSTED) {
+            throw ValidationException("INVALID_STATUS", "Only POSTED entries can be reversed.")
+        }
+
+        // IAS 8: reversals are posted in the current open period, not backdated
+        val today = LocalDate.now()
+        val openPeriod = try {
+            periodService.findPeriodForDate(original.entityId, today)
+        } catch (e: Exception) {
+            throw ValidationException(
+                "NO_OPEN_PERIOD",
+                "Cannot create reversing entry: no open period contains today ($today). " +
+                "Open a period for today's date first."
+            )
+        }
+
+        // Step 1 — Build reversing entry with flipped debit/credit on every line.
+        val reversing = JournalEntry(
+            entityId    = original.entityId,
+            periodId    = openPeriod.id,
+            transDate   = today,
+            description = "REVERSAL as of $today: ${original.description ?: ""}".trim(),
+            sourceType  = "REVERSAL",
+            sourceId    = original.id
+        )
+
+        original.lines.forEach { originalLine ->
+            val reversedLine = JournalEntryLine(
+                accountId = originalLine.accountId,
+                description = originalLine.description,
+                // Flip debit ↔ credit
+                debitAmount = originalLine.creditAmount,
+                creditAmount = originalLine.debitAmount,
+                currencyCode = originalLine.currencyCode,
+                exchangeRate = originalLine.exchangeRate,
+                // Flip functional amounts accordingly
+                functionalDebit = originalLine.functionalCredit,
+                functionalCredit = originalLine.functionalDebit,
+                taxCode = originalLine.taxCode,
+                taxAmount = originalLine.taxAmount
+            )
+            reversing.addLine(reversedLine)
+        }
+
+        // Step 2 — Persist as DRAFT first (createEntry validates and saves).
+        val savedReversing = journalEntryRepository.save(reversing)
+
+        // Step 3 — Validate double-entry and post the reversing entry.
+        doubleEntryValidator.validate(savedReversing)
+        postingService.postJournalEntry(savedReversing)
+        savedReversing.status = JournalEntryStatus.POSTED
+        journalEntryRepository.save(savedReversing)
+
+        // Step 4 — Mark original as REVERSED (must happen after reversing is posted).
+        original.status = JournalEntryStatus.REVERSED
+        journalEntryRepository.save(original)
+
+        // Step 5 — Return the new reversing entry.
+        return savedReversing
+    }
+
+    /**
+     * §12.2 — Return the immutable audit trail for a journal entry, newest first.
+     * Filters AuditLog records by resourceId = entryId and resourceType = "JOURNAL_ENTRY".
+     */
+    @Transactional(readOnly = true)
+    fun getAuditTrail(entryId: UUID): List<AuditLog> {
+        return auditLogRepository.findAllByResourceIdOrderByCreatedAtDesc(entryId)
+            .filter { it.resourceType == "JOURNAL_ENTRY" }
+    }
+
+    @Transactional(readOnly = true)
+    fun findById(id: UUID): JournalEntry = journalEntryRepository.findById(id)
+        .orElseThrow { ResourceNotFoundException("JOURNAL_ENTRY_NOT_FOUND", id, "Journal Entry") }
+
+    /**
+     * Compatibility alias for createEntry
+     */
+    @Transactional
+    fun createDraft(command: CreateJournalEntryCommand): JournalEntry = createEntry(command)
+}
+
+@Schema(description = "Command to create or update a journal entry")
+data class CreateJournalEntryCommand(
+    val entityId: UUID,
+    val periodId: UUID,
+    val reference: String? = null,
+    val transDate: LocalDate,
+    val description: String?,
+    val sourceType: String? = null,
+    val sourceId: UUID? = null,
+    val lines: List<CreateJournalLineCommand>
+)
+
+data class CreateJournalLineCommand(
+    val accountId: UUID,
+    val description: String?,
+    val debitAmount: BigDecimal = BigDecimal.ZERO,
+    val creditAmount: BigDecimal = BigDecimal.ZERO,
+    val currencyCode: String,
+    val exchangeRate: BigDecimal = BigDecimal.ONE,
+    /** Tax code string (e.g. "VAT_16") — null if the line is not subject to tax. */
+    val taxCode: String? = null,
+    /** Pre-computed tax amount; null when no tax applies. */
+    val taxAmount: BigDecimal? = null
+)

@@ -1,0 +1,144 @@
+package com.qesuite.accounting.tax.service
+
+import com.qesuite.accounting.tax.domain.TaxCode
+import com.qesuite.accounting.tax.domain.TaxRate
+import com.qesuite.accounting.tax.repository.TaxCodeRepository
+import com.qesuite.accounting.tax.repository.TaxRateRepository
+import com.qesuite.accounting.shared.exceptions.ConflictException
+import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
+import com.qesuite.accounting.shared.exceptions.ValidationException
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
+import java.time.LocalDate
+import java.util.*
+
+@Service
+@Transactional
+class TaxService(
+    private val taxCodeRepository: TaxCodeRepository,
+    private val taxRateRepository: TaxRateRepository
+) {
+
+    /**
+     * §13.1 — Tax Calculation Engine
+     * Calculates the tax amount for a given base amount and tax code string.
+     */
+    @Transactional(readOnly = true)
+    fun calculateTax(entityId: UUID, taxCodeStr: String, baseAmount: BigDecimal, date: LocalDate): BigDecimal {
+        val taxCode = taxCodeRepository.findByEntityIdAndCode(entityId, taxCodeStr)
+            .orElseThrow { ResourceNotFoundException("TAX_CODE_NOT_FOUND", taxCodeStr, "Tax Code") }
+
+        val rate = taxRateRepository.findEffectiveRate(taxCode.id!!, date)
+            ?: throw ResourceNotFoundException("TAX_RATE_NOT_FOUND", taxCodeStr, "Tax Rate for $date")
+
+        return baseAmount.multiply(rate.rate)
+    }
+
+    /**
+     * Returns the tax code entity for validation by code string.
+     */
+    @Transactional(readOnly = true)
+    fun getTaxCode(entityId: UUID, code: String): TaxCode {
+        return taxCodeRepository.findByEntityIdAndCode(entityId, code)
+            .orElseThrow { ResourceNotFoundException("TAX_CODE_NOT_FOUND", code, "Tax Code") }
+    }
+
+    /**
+     * Returns the tax code entity by primary key.
+     */
+    @Transactional(readOnly = true)
+    fun getTaxCodeById(id: UUID): TaxCode =
+        taxCodeRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("TAX_CODE_NOT_FOUND", id, "TaxCode") }
+
+    /**
+     * §13.1, §14.1 — Calculate tax by tax rate primary key.
+     *
+     * Used by the invoicing module where invoice lines reference a `tax_rate_id` UUID
+     * directly rather than the tax-code string. Returns `base × rate.rate`.
+     * Throws `TAX_RATE_NOT_FOUND` (HTTP 404) if the rate is absent or inactive.
+     */
+    @Transactional(readOnly = true)
+    fun calculateTaxByRateId(taxRateId: UUID, baseAmount: BigDecimal): BigDecimal {
+        val rate: TaxRate = taxRateRepository.findById(taxRateId)
+            .orElseThrow { ResourceNotFoundException("TAX_RATE_NOT_FOUND", taxRateId, "Tax Rate") }
+        return baseAmount.multiply(rate.rate)
+    }
+
+    /**
+     * §13.2 — Create a new tax code for the given entity.
+     * Validates code uniqueness within the entity scope.
+     */
+    fun createTaxCode(command: CreateTaxCodeCommand): TaxCode {
+        if (taxCodeRepository.existsByEntityIdAndCode(command.entityId, command.code)) {
+            throw ConflictException(
+                errorCode = "TAX_CODE_DUPLICATE",
+                message = "Tax code '${command.code}' already exists for entity ${command.entityId}.",
+                context = mapOf("entityId" to command.entityId.toString(), "code" to command.code)
+            )
+        }
+
+        val taxCode = TaxCode(
+            entityId = command.entityId,
+            code = command.code,
+            description = command.description,
+            isRecoverable = command.isRecoverable
+        )
+
+        return taxCodeRepository.save(taxCode)
+    }
+
+    /**
+     * §13.2 — Create a new tax rate effective from a given date.
+     * Rate must be between 0 and 1 inclusive (e.g., 0.1600 for 16%).
+     */
+    fun createTaxRate(command: CreateTaxRateCommand): TaxRate {
+        val taxCode = taxCodeRepository.findById(command.taxCodeId)
+            .orElseThrow { ResourceNotFoundException("TAX_CODE_NOT_FOUND", command.taxCodeId, "TaxCode") }
+
+        if (command.rate < BigDecimal.ZERO || command.rate > BigDecimal.ONE) {
+            throw ValidationException(
+                errorCode = "INVALID_TAX_RATE",
+                message = "Tax rate must be between 0 and 1 (e.g., 0.1600 for 16%). Provided: ${command.rate}"
+            )
+        }
+
+        val taxRate = TaxRate(
+            entityId = command.entityId,
+            taxCode = taxCode,
+            rate = command.rate,
+            effectiveFrom = command.effectiveFrom
+        )
+
+        return taxRateRepository.save(taxRate)
+    }
+
+    /**
+     * §13.2 — List all tax codes for a given entity.
+     */
+    @Transactional(readOnly = true)
+    fun listTaxCodes(entityId: UUID): List<TaxCode> =
+        taxCodeRepository.findByEntityId(entityId)
+
+    /**
+     * §13.2 — List all tax rates for a given tax code.
+     */
+    @Transactional(readOnly = true)
+    fun listRates(taxCodeId: UUID): List<TaxRate> =
+        taxRateRepository.findByTaxCodeId(taxCodeId)
+}
+
+data class CreateTaxCodeCommand(
+    val entityId: UUID,
+    val code: String,
+    val description: String?,
+    val isRecoverable: Boolean = true
+)
+
+data class CreateTaxRateCommand(
+    val entityId: UUID,
+    val taxCodeId: UUID,
+    val rate: BigDecimal,  // e.g., 0.1600 for 16%
+    val effectiveFrom: LocalDate
+)

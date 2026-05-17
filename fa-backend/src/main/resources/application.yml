@@ -1,0 +1,87 @@
+spring:
+  application:
+    name: accounting
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/accounting}
+    username: ${DB_USERNAME:mf}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+  jpa:
+    open-in-view: false # §2.4 MANDATORY — prevents lazy loading issues in controllers
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    path: /v3/api-docs.json
+  show-actuator: true
+  override-kotlin-serialization: true
+
+server:
+  shutdown: graceful
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    com.qesuite.accounting: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:your-very-secret-key-minimum-256-bits-long-change-in-production}
+      expiration: ${JWT_EXPIRATION_MS:86400000}              # 24 hours
+      refresh-expiration: ${JWT_REFRESH_EXPIRATION_MS:2592000000}  # 30 days
+  email:
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:noreply@qesuite.com}
+    base-url: ${APP_BASE_URL:http://localhost:5173}
+  storage:
+    type: ${APP_STORAGE_TYPE:local}
+    upload-dir: ${UPLOAD_DIR:./uploads}
+    minio:
+      endpoint: ${APP_STORAGE_MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${APP_STORAGE_MINIO_ACCESS_KEY:minioadmin}
+      secret-key: ${APP_STORAGE_MINIO_SECRET_KEY:minioadmin}
+      bucket: ${APP_STORAGE_MINIO_BUCKET:qesuite-documents}

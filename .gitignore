@@ -1,0 +1,39 @@
+# ── Maven / Spring Boot ───────────────────────────────────────────────────────
+fa-backend/target/
+fa-backend/*.log
+fa-backend/.mvn/wrapper/maven-wrapper.jar
+
+# ── Node / Vite ───────────────────────────────────────────────────────────────
+fa-frontend/node_modules/
+fa-frontend/dist/
+fa-frontend/.vite/
+fa-frontend/.env
+fa-frontend/.env.local
+fa-frontend/.env.*.local
+
+# ── Environment / Secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+*.env
+application-local.properties
+application-secrets.properties
+fa-backend/src/main/resources/application.properties
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+.DS_Store
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Docker volumes / data ─────────────────────────────────────────────────────
+postgres-data/
+data/

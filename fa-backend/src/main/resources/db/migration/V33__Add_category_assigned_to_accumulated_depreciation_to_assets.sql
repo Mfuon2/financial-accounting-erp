@@ -1,0 +1,3 @@
+ALTER TABLE fixed_assets ADD COLUMN IF NOT EXISTS category VARCHAR(80);
+ALTER TABLE fixed_assets ADD COLUMN IF NOT EXISTS assigned_to VARCHAR(200);
+ALTER TABLE fixed_assets ADD COLUMN IF NOT EXISTS accumulated_depreciation DECIMAL(20,6) NOT NULL DEFAULT 0;

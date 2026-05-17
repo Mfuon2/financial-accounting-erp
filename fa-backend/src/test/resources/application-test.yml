@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;NON_KEYWORDS=VALUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.cache.CacheAutoConfiguration
+  batch:
+    job:
+      enabled: false
+
+# Test-safe JWT secret — long enough to pass the startup guard (>= 32 chars)
+# ALLOW_INSECURE_JWT_SECRET is not needed because we set a real (test) secret here
+app:
+  security:
+    jwt:
+      secret: test-secret-key-for-unit-tests-only-32chars-min
+      expiration: 3600000
+      refresh-expiration: 86400000
