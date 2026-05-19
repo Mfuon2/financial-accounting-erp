@@ -7,4 +7,5 @@ import java.util.UUID
 interface BillPaymentRepository : JpaRepository<BillPayment, UUID> {
     fun findByBillId(billId: UUID): List<BillPayment>
     fun findByEntityId(entityId: UUID): List<BillPayment>
+    fun findByBillIdIn(billIds: List<UUID>): List<BillPayment>
 }

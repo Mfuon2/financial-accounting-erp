@@ -75,6 +75,11 @@ class Account(
 
     @Column(name = "original_currency_balance", precision = 20, scale = 6, nullable = false)
     @Schema(type = "number", format = "decimal", example = "0.000000")
-    var originalCurrencyBalance: BigDecimal = BigDecimal.ZERO
+    var originalCurrencyBalance: BigDecimal = BigDecimal.ZERO,
+
+    // True when this account has at least one child — direct posting is blocked (IAS 1 §29)
+    @Column(name = "is_header", nullable = false)
+    @Schema(example = "false", description = "Header/summary accounts cannot receive direct journal postings")
+    var isHeader: Boolean = false
 
 ) : BaseFinancialEntity(entityId = entityId)

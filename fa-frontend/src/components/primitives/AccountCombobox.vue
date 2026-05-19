@@ -2,11 +2,12 @@
 import { ref, computed, onUnmounted } from 'vue'
 
 const props = defineProps({
-  modelValue: { type: String, default: '' },
-  accounts:   { type: Array, default: () => [] },
-  placeholder:{ type: String, default: 'Search by code or name…' },
-  error:      { type: Boolean, default: false },
-  tableCell:  { type: Boolean, default: false }, // compact style when inside a table
+  modelValue:  { type: String, default: '' },
+  accounts:    { type: Array, default: () => [] },
+  allAccounts: { type: Array, default: () => [] }, // full account list incl. headers, for "is header" detection
+  placeholder: { type: String, default: 'Search by code or name…' },
+  error:       { type: Boolean, default: false },
+  tableCell:   { type: Boolean, default: false }, // compact style when inside a table
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -24,6 +25,15 @@ const filtered = computed(() => {
       a.accountName.toLowerCase().includes(q)
     )
     .slice(0, 15)
+})
+
+// When user typed something but got no results, check if they typed a header account code
+const isHeaderAccount = computed(() => {
+  const q = (props.modelValue || '').trim()
+  if (!q || filtered.value.length > 0) return false
+  const pool = props.allAccounts.length ? props.allAccounts : props.accounts
+  const match = pool.find(a => a.accountCode.toLowerCase() === q.toLowerCase())
+  return !!match?.isHeader
 })
 
 function positionDrop() {
@@ -96,7 +106,7 @@ function onKeydown(e) {
     />
 
     <Teleport to="body">
-      <div v-if="open && filtered.length" class="acct-drop" :style="dropStyle">
+      <div v-if="open && (filtered.length || (modelValue && !filtered.length))" class="acct-drop" :style="dropStyle">
         <div
           v-for="(a, i) in filtered"
           :key="a.id || a.accountCode"
@@ -107,6 +117,12 @@ function onKeydown(e) {
           <code class="acct-code">{{ a.accountCode }}</code>
           <span class="acct-name">{{ a.accountName }}</span>
           <span class="acct-sub">{{ (a.accountSubtype || '').replace(/_/g, ' ') }}</span>
+        </div>
+        <div v-if="!filtered.length && modelValue" class="acct-empty">
+          <span v-if="isHeaderAccount">
+            <strong>{{ modelValue }}</strong> is a summary account — select a child account to post to.
+          </span>
+          <span v-else>No matching posting accounts for "{{ modelValue }}"</span>
         </div>
       </div>
     </Teleport>
@@ -157,5 +173,11 @@ function onKeydown(e) {
   white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+.acct-empty {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
 }
 </style>

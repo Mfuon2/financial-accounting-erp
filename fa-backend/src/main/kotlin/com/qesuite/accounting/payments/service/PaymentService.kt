@@ -14,11 +14,14 @@ import com.qesuite.accounting.payments.domain.PaymentStatus
 import com.qesuite.accounting.payments.dto.CreatePaymentCommand
 import com.qesuite.accounting.payments.dto.MpesaCallbackPayload
 import com.qesuite.accounting.payments.repository.PaymentRepository
+import com.qesuite.accounting.receipts.service.ReceiptService
 import com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException
 import com.qesuite.accounting.shared.exceptions.ConflictException
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.annotation.Lazy
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -50,10 +53,16 @@ class PaymentService(
     private val invoiceService: InvoiceService,
     private val customerRepository: CustomerRepository,
     private val accountRepository: AccountRepository,
-    private val journalService: JournalService
+    private val journalService: JournalService,
+    private val codeGeneratorService: com.qesuite.accounting.shared.codegen.service.CodeGeneratorService,
+    private val entityNumberConfigService: com.qesuite.accounting.shared.codegen.service.EntityNumberConfigService,
 ) {
 
     private val log = LoggerFactory.getLogger(PaymentService::class.java)
+
+    // Lazy to avoid circular dependency (ReceiptService → PaymentRepository → PaymentService)
+    @Lazy @Autowired
+    private lateinit var receiptService: ReceiptService
 
     companion object {
         private const val MONEY_SCALE = 6
@@ -255,15 +264,19 @@ class PaymentService(
         val customer = customerRepository.findById(payment.customerId)
             .orElseThrow { ResourceNotFoundException("CUSTOMER_NOT_FOUND", payment.customerId, "Customer") }
         val arAccountId = customer.defaultArAccountId
+            ?: accountRepository.findAllByEntityIdAndAccountSubtype(payment.entityId, AccountSubtype.CURRENT_RECEIVABLE)
+                .filter { !it.isHeader }
+                .minByOrNull { it.accountCode }?.id
             ?: throw BusinessRuleViolationException(
-                errorCode = "CUSTOMER_AR_ACCOUNT_MISSING",
-                message = "Customer ${customer.customerCode} has no defaultArAccountId configured.",
-                context = mapOf("customer_id" to customer.id)
+                errorCode = "AR_ACCOUNT_NOT_FOUND",
+                message = "No Accounts Receivable account found. Add a CURRENT_RECEIVABLE account to the chart of accounts.",
+                context = mapOf("entity_id" to payment.entityId)
             )
 
         // Cash/bank account — find first CASH_AND_EQUIVALENTS account for the entity
         val cashAccount = accountRepository.findAllByEntityId(payment.entityId)
-            .firstOrNull { it.accountSubtype == AccountSubtype.CASH_AND_EQUIVALENTS && it.isActive }
+            .filter { it.accountSubtype == AccountSubtype.CASH_AND_EQUIVALENTS && it.isActive && !it.isHeader }
+            .minByOrNull { it.accountCode }
             ?: throw BusinessRuleViolationException(
                 errorCode = "MISSING_CASH_ACCOUNT",
                 message = "No active CASH_AND_EQUIVALENTS account found for entity ${payment.entityId}. Configure one before posting payments.",
@@ -318,7 +331,23 @@ class PaymentService(
         val amountToApply = payment.matchedAmount ?: payment.paymentAmount
         invoiceService.applyPayment(invoiceId, amountToApply)
 
-        return paymentRepository.save(payment)
+        val saved = paymentRepository.save(payment)
+
+        // Auto-generate a receipt for every posted payment so it is immediately available.
+        // Wrapped in try/catch so a receipt failure never rolls back the payment post.
+        try {
+            receiptService.generateReceipt(
+                paymentId = saved.id,
+                entityId  = saved.entityId,
+                periodId  = saved.periodId ?: invoice.periodId,
+            )
+            log.info("postPayment: auto-generated receipt for payment {}", saved.paymentNumber)
+        } catch (e: Exception) {
+            // ConflictException means a receipt already exists — safe to ignore
+            log.warn("postPayment: could not auto-generate receipt for payment {}: {}", saved.paymentNumber, e.message)
+        }
+
+        return saved
     }
 
     // -----------------------------------------------------------------------
@@ -356,7 +385,8 @@ class PaymentService(
             )
 
         val cashAccount = accountRepository.findAllByEntityId(payment.entityId)
-            .firstOrNull { it.accountSubtype == AccountSubtype.CASH_AND_EQUIVALENTS && it.isActive }
+            .filter { it.accountSubtype == AccountSubtype.CASH_AND_EQUIVALENTS && it.isActive && !it.isHeader }
+            .minByOrNull { it.accountCode }
             ?: throw BusinessRuleViolationException(
                 errorCode = "MISSING_CASH_ACCOUNT",
                 message = "No active CASH_AND_EQUIVALENTS account found for entity ${payment.entityId}.",
@@ -557,11 +587,11 @@ class PaymentService(
     }
 
     private fun generatePaymentNumber(entityId: UUID): String {
-        val year       = Year.now().value
-        val entityCode = entityId.toString().replace("-", "").take(4).uppercase()
-        val seq        = paymentRepository.countByEntityId(entityId) + 1
-        val collision  = UUID.randomUUID().toString().replace("-","").take(4).uppercase()
-        return "PAY-$year-$entityCode-${seq.toString().padStart(6, '0')}-$collision"
+        val config = entityNumberConfigService.resolveConfig(entityId, "PAYMENT")
+        return codeGeneratorService.nextUnique(
+            entityId, config.prefix, config.yearScoped,
+            customFormat = config.customFormat,
+        ) { !paymentRepository.existsByEntityIdAndPaymentNumber(entityId, it) }
     }
 
     private fun parseMpesaDate(raw: String?): LocalDate {

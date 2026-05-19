@@ -30,6 +30,11 @@ const showInactive = ref(false)
 const drawer       = ref(null)
 const editMode     = ref(false)
 
+// Statement tab
+const drawerTab       = ref('details')
+const statement       = ref(null)
+const statementLoading = ref(false)
+
 // New supplier modal
 const showNew   = ref(false)
 const newSaving = ref(false)
@@ -111,8 +116,11 @@ async function openNew() {
   }
 }
 
+const E164_RE = /^\+[1-9]\d{1,14}$/
 async function saveNew() {
   if (!newForm.value.name?.trim()) return toast.warn('Supplier name is required.')
+  const phone = newForm.value.phone?.trim()
+  if (phone && !E164_RE.test(phone)) return toast.warn('Phone must be in E.164 format — e.g. +254712345678')
   newSaving.value = true
   try {
     const created = await suppliersApi.create({
@@ -131,22 +139,36 @@ async function saveNew() {
 }
 
 // ── View / Edit ─────────────────────────────────────────────────────────────────
-function openDrawer(s) {
+async function openDrawer(s) {
   drawer.value   = s
   editMode.value = false
+  drawerTab.value = 'details'
+  statement.value = null
   editForm.value = {
     email:        s.email        ?? '',
     phone:        s.phone        ?? '',
     paymentTerms: s.paymentTerms ?? '',
   }
+  // Pre-fetch statement in background
+  loadStatement(s.id)
+}
+
+async function loadStatement(id) {
+  statementLoading.value = true
+  try {
+    statement.value = await suppliersApi.statement(id)
+  } catch { /* non-critical — user can switch tabs and see empty state */ }
+  finally { statementLoading.value = false }
 }
 
 async function saveEdit() {
+  const phone = editForm.value.phone?.trim()
+  if (phone && !E164_RE.test(phone)) return toast.warn('Phone must be in E.164 format — e.g. +254712345678')
   editSaving.value = true
   try {
     const updated = await suppliersApi.update(drawer.value.id, {
       email:        editForm.value.email?.trim()  || null,
-      phone:        editForm.value.phone?.trim()  || null,
+      phone:        phone || null,
       paymentTerms: editForm.value.paymentTerms   || null,
     })
     const merged = { ...drawer.value, ...updated }
@@ -179,6 +201,14 @@ async function confirmDeactivate() {
 }
 
 function termsLabel(t) { return t ? t.replace(/_/g, ' ') : '—' }
+
+function stmtBadge(status) {
+  const map = {
+    DRAFT: 'draft', APPROVED: 'posted', PARTIALLY_PAID: 'info',
+    PAID: 'active', VOID: 'inactive',
+  }
+  return map[status] ?? 'outline'
+}
 </script>
 
 <template>
@@ -297,80 +327,166 @@ function termsLabel(t) { return t ? t.replace(/_/g, ' ') : '—' }
       :open="!!drawer"
       :title="drawer?.name"
       :subtitle="drawer?.supplierCode"
-      :width="640"
-      @close="drawer = null; editMode = false"
+      :width="860"
+      @close="drawer = null; editMode = false; drawerTab = 'details'"
     >
       <div v-if="drawer">
-        <!-- Summary stats -->
-        <div class="drawer-stats">
-          <div class="dstat">
-            <div class="dstat-label">Payment terms</div>
-            <div class="dstat-value">{{ termsLabel(drawer.paymentTerms) }}</div>
-          </div>
-          <div class="dstat">
-            <div class="dstat-label">Status</div>
-            <div class="dstat-value">
-              <Badge :status="drawer.isActive ? 'active' : 'inactive'" :dot="false" />
+        <!-- Tab pills -->
+        <div class="drawer-tabs">
+          <button class="dtab" :class="{ active: drawerTab === 'details' }" @click="drawerTab = 'details'">Details</button>
+          <button class="dtab" :class="{ active: drawerTab === 'statement' }" @click="drawerTab = 'statement'">
+            Statement
+            <span v-if="statement?.lines?.length" class="dtab-count">{{ statement.lines.length }}</span>
+          </button>
+        </div>
+
+        <!-- ── Details tab ── -->
+        <div v-if="drawerTab === 'details'">
+          <!-- Summary stats -->
+          <div class="drawer-stats">
+            <div class="dstat">
+              <div class="dstat-label">Payment terms</div>
+              <div class="dstat-value">{{ termsLabel(drawer.paymentTerms) }}</div>
+            </div>
+            <div class="dstat">
+              <div class="dstat-label">Status</div>
+              <div class="dstat-value">
+                <Badge :status="drawer.isActive ? 'active' : 'inactive'" :dot="false" />
+              </div>
+            </div>
+            <div class="dstat">
+              <div class="dstat-label">Created</div>
+              <div class="dstat-value">{{ fmtDate(drawer.createdAt) || '—' }}</div>
             </div>
           </div>
-          <div class="dstat">
-            <div class="dstat-label">Created</div>
-            <div class="dstat-value">{{ fmtDate(drawer.createdAt) || '—' }}</div>
+
+          <!-- Read-only view -->
+          <div v-if="!editMode">
+            <div class="form-grid cols-2" style="margin-bottom:16px">
+              <div class="field"><label>Supplier code</label><div class="input ro mono">{{ drawer.supplierCode }}</div></div>
+              <div class="field"><label>Legal name</label><div class="input ro">{{ drawer.name }}</div></div>
+              <div class="field"><label>Tax PIN</label><div class="input ro mono">{{ drawer.taxNumber || '—' }}</div></div>
+              <div class="field"><label>Email</label><div class="input ro">{{ drawer.email || '—' }}</div></div>
+              <div class="field"><label>Phone</label><div class="input ro">{{ drawer.phone || '—' }}</div></div>
+              <div class="field"><label>Payment terms</label><div class="input ro">{{ termsLabel(drawer.paymentTerms) }}</div></div>
+              <div class="field"><label>Created</label><div class="input ro">{{ fmtDate(drawer.createdAt) || '—' }}</div></div>
+              <div class="field"><label>Last updated</label><div class="input ro">{{ fmtDate(drawer.modifiedAt) || '—' }}</div></div>
+            </div>
+            <div v-if="drawer.deactivationReason" class="info-box" style="border-color:oklch(0.55 0.18 15);background:oklch(0.98 0.02 15)">
+              <strong>Deactivated:</strong> {{ drawer.deactivationReason }}
+            </div>
+          </div>
+
+          <!-- Edit form -->
+          <div v-else>
+            <div class="info-box" style="margin-bottom:12px">
+              <strong>Note:</strong> Supplier code and name are immutable after creation.
+            </div>
+            <div class="form-grid cols-2">
+              <div class="field">
+                <label>Email</label>
+                <input v-model="editForm.email" class="input" type="email" />
+              </div>
+              <div class="field">
+                <label>Phone</label>
+                <input v-model="editForm.phone" class="input" />
+              </div>
+              <div class="field" style="grid-column:1/-1">
+                <label>Payment terms</label>
+                <SearchableSelect
+                  v-model="editForm.paymentTerms"
+                  :options="[{ value: '', label: '— None —' }, ...PAYMENT_TERMS.map(t => ({ value: t, label: termsLabel(t) }))]"
+                  placeholder="Select terms"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Read-only view -->
-        <div v-if="!editMode">
-          <div class="form-grid cols-2" style="margin-bottom:16px">
-            <div class="field"><label>Supplier code</label><div class="input ro mono">{{ drawer.supplierCode }}</div></div>
-            <div class="field"><label>Legal name</label><div class="input ro">{{ drawer.name }}</div></div>
-            <div class="field"><label>Tax PIN</label><div class="input ro mono">{{ drawer.taxNumber || '—' }}</div></div>
-            <div class="field"><label>Email</label><div class="input ro">{{ drawer.email || '—' }}</div></div>
-            <div class="field"><label>Phone</label><div class="input ro">{{ drawer.phone || '—' }}</div></div>
-            <div class="field"><label>Payment terms</label><div class="input ro">{{ termsLabel(drawer.paymentTerms) }}</div></div>
-            <div class="field"><label>Created</label><div class="input ro">{{ fmtDate(drawer.createdAt) || '—' }}</div></div>
-            <div class="field"><label>Last updated</label><div class="input ro">{{ fmtDate(drawer.modifiedAt) || '—' }}</div></div>
+        <!-- ── Statement tab ── -->
+        <div v-else-if="drawerTab === 'statement'">
+          <!-- Summary KPIs -->
+          <div v-if="statement" class="stmt-kpis">
+            <div class="skpi">
+              <div class="skpi-label">Total invoiced</div>
+              <div class="skpi-value">{{ statement.currency }} {{ fmt(statement.totalDebits) }}</div>
+            </div>
+            <div class="skpi">
+              <div class="skpi-label">Total paid</div>
+              <div class="skpi-value credit">{{ statement.currency }} {{ fmt(statement.totalCredits) }}</div>
+            </div>
+            <div class="skpi">
+              <div class="skpi-label">Outstanding balance</div>
+              <div class="skpi-value" :class="statement.closingBalance > 0 ? 'debit' : 'credit'">
+                {{ statement.currency }} {{ fmt(statement.closingBalance) }}
+              </div>
+            </div>
           </div>
-          <div v-if="drawer.deactivationReason" class="info-box" style="border-color:oklch(0.55 0.18 15);background:oklch(0.98 0.02 15)">
-            <strong>Deactivated:</strong> {{ drawer.deactivationReason }}
-          </div>
-        </div>
 
-        <!-- Edit form -->
-        <div v-else>
-          <div class="info-box" style="margin-bottom:12px">
-            <strong>Note:</strong> Supplier code and name are immutable after creation.
+          <!-- Transaction table -->
+          <div v-if="statementLoading" class="stmt-empty">Loading statement…</div>
+          <div v-else-if="!statement || !statement.lines?.length" class="stmt-empty">
+            No transactions found for this supplier.
           </div>
-          <div class="form-grid cols-2">
-            <div class="field">
-              <label>Email</label>
-              <input v-model="editForm.email" class="input" type="email" />
-            </div>
-            <div class="field">
-              <label>Phone</label>
-              <input v-model="editForm.phone" class="input" />
-            </div>
-            <div class="field" style="grid-column:1/-1">
-              <label>Payment terms</label>
-              <SearchableSelect
-                v-model="editForm.paymentTerms"
-                :options="[{ value: '', label: '— None —' }, ...PAYMENT_TERMS.map(t => ({ value: t, label: termsLabel(t) }))]"
-                placeholder="Select terms"
-              />
-            </div>
-          </div>
+          <table v-else class="tbl stmt-tbl">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Reference</th>
+                <th>Description</th>
+                <th class="num">Debit</th>
+                <th class="num">Credit</th>
+                <th class="num">Balance</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(line, i) in statement.lines" :key="i" :class="'stmt-row-' + line.type.toLowerCase()">
+                <td class="mono small">{{ line.date }}</td>
+                <td>
+                  <span class="type-pill" :class="line.type.toLowerCase()">
+                    {{ { BILL: 'Bill', PAYMENT: 'Payment', DEBIT_NOTE: 'Debit Note' }[line.type] ?? line.type }}
+                  </span>
+                </td>
+                <td><code style="font-size:11px">{{ line.reference }}</code></td>
+                <td class="small muted">{{ line.description }}</td>
+                <td class="num mono small">
+                  <span v-if="line.debit > 0" class="debit-amt">{{ fmt(line.debit) }}</span>
+                  <span v-else class="muted">—</span>
+                </td>
+                <td class="num mono small">
+                  <span v-if="line.credit > 0" class="credit-amt">{{ fmt(line.credit) }}</span>
+                  <span v-else class="muted">—</span>
+                </td>
+                <td class="num mono small fw-600">{{ fmt(line.balance) }}</td>
+                <td>
+                  <Badge v-if="line.status" :status="stmtBadge(line.status)" :dot="false" style="font-size:10px">
+                    {{ line.status.replace(/_/g, ' ') }}
+                  </Badge>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <TableFooter v-if="statement?.lines?.length" :total="statement.lines.length" label="transactions" />
         </div>
       </div>
 
       <template #footer>
-        <template v-if="!editMode">
-          <Button v-if="drawer?.isActive" variant="primary" icon="edit" @click="editMode = true">Edit</Button>
-          <Button v-if="drawer?.isActive" variant="danger"  @click="openDeactivate">Deactivate</Button>
-          <Button variant="ghost" @click="drawer = null; editMode = false">Close</Button>
+        <template v-if="drawerTab === 'details'">
+          <template v-if="!editMode">
+            <Button v-if="drawer?.isActive" variant="primary" icon="edit" @click="editMode = true">Edit</Button>
+            <Button v-if="drawer?.isActive" variant="danger"  @click="openDeactivate">Deactivate</Button>
+            <Button variant="ghost" @click="drawer = null; editMode = false; drawerTab = 'details'">Close</Button>
+          </template>
+          <template v-else>
+            <Button variant="primary" :loading="editSaving" @click="saveEdit">Save changes</Button>
+            <Button variant="ghost" @click="editMode = false">Cancel</Button>
+          </template>
         </template>
         <template v-else>
-          <Button variant="primary" :loading="editSaving" @click="saveEdit">Save changes</Button>
-          <Button variant="ghost" @click="editMode = false">Cancel</Button>
+          <Button variant="ghost" icon="download">Export PDF</Button>
+          <Button variant="ghost" @click="drawer = null; drawerTab = 'details'">Close</Button>
         </template>
       </template>
     </Modal>
@@ -395,6 +511,45 @@ function termsLabel(t) { return t ? t.replace(/_/g, ' ') : '—' }
 </template>
 
 <style scoped>
+/* ── Drawer tabs ─────────────────────────────────────────────────────────── */
+.drawer-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border, #e8e8e8);
+  margin-bottom: 20px;
+}
+.dtab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.dtab:hover { color: var(--text); }
+.dtab.active { color: var(--accent, #3b5bdb); border-bottom-color: var(--accent, #3b5bdb); }
+.dtab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--accent-muted, #e8f0ff);
+  color: var(--accent, #3b5bdb);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ── Details tab ─────────────────────────────────────────────────────────── */
 .drawer-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -421,6 +576,60 @@ function termsLabel(t) { return t ? t.replace(/_/g, ' ') : '—' }
   line-height: 1.2;
   color: var(--text);
 }
+
+/* ── Statement tab ───────────────────────────────────────────────────────── */
+.stmt-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.skpi {
+  background: var(--surface-raised, #f8f8f8);
+  border: 1px solid var(--border, #e8e8e8);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.skpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+.skpi-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.skpi-value.debit  { color: oklch(0.55 0.18 15); }
+.skpi-value.credit { color: var(--success, #10b981); }
+
+.stmt-tbl { font-size: 12px; }
+.stmt-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.debit-amt  { color: oklch(0.55 0.18 15); font-weight: 600; }
+.credit-amt { color: var(--success, #10b981); font-weight: 600; }
+
+.type-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+}
+.type-pill.bill       { background: oklch(0.95 0.04 250); color: oklch(0.45 0.18 250); }
+.type-pill.payment    { background: oklch(0.95 0.06 145); color: oklch(0.4 0.18 145); }
+.type-pill.debit_note { background: oklch(0.97 0.04 50); color: oklch(0.5 0.18 50); }
+
+/* ── Shared ──────────────────────────────────────────────────────────────── */
 .ro { cursor: default; background: var(--surface-raised, #f8f8f8); }
 .chip {
   display: inline-block;
@@ -434,4 +643,7 @@ function termsLabel(t) { return t ? t.replace(/_/g, ' ') : '—' }
 }
 .req { color: var(--danger, oklch(0.55 0.18 15)); }
 .empty-state { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
+.small { font-size: 12px; }
+.muted { color: var(--muted); }
+.fw-600 { font-weight: 600; }
 </style>

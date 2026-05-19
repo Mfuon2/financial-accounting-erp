@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { BILLS } from '@/data/index.js'
-import { bills as billsApi, suppliers as suppliersApi } from '@/api/index.js'
+import { bills as billsApi, suppliers as suppliersApi, sourceDocs as sourceDocsApi, accounts as accountsApi } from '@/api/index.js'
 import { useAppMode } from '@/composables/useAppMode.js'
 import { useToast } from '@/composables/useToast.js'
 import { useAuth } from '@/composables/useAuth.js'
@@ -23,7 +23,9 @@ const { currentUser } = useAuth()
 const entityId = computed(() => currentUser.value?.entityId ?? 'current')
 
 const list        = ref([...BILLS])
-const supplierList = ref([])
+const supplierList  = ref([])
+const sourceDocList = ref([])
+const accountOpts   = ref([])   // expense accounts for line item account picker
 const drawer      = ref(null)
 const search      = ref('')
 const statusFilter = ref('ALL')
@@ -87,6 +89,36 @@ onMounted(async () => {
     if (Array.isArray(items)) {
       supplierList.value = items.map(s => ({ value: s.id, label: s.name ?? s.supplierName ?? s.id }))
     }
+  } catch { /* silently skip */ }
+  try {
+    const data = await sourceDocsApi.list({ entityId: entityId.value, size: 200 })
+    const items = Array.isArray(data) ? data : (data?.content ?? [])
+    sourceDocList.value = items
+      .filter(d => d.status !== 'VOID')
+      .map(d => {
+        const ref    = d.referenceNumber ?? d.ref ?? d.id
+        const type   = d.type ?? ''
+        const party  = d.supplier ?? d.description ?? ''
+        const amt    = d.amount ? ` · ${d.currencyCode ?? d.currency ?? ''} ${fmt(d.amount)}` : ''
+        return { value: d.id, label: `${ref} — ${type}${party ? ' · ' + party : ''}${amt}` }
+      })
+  } catch { /* silently skip */ }
+  try {
+    const data = await accountsApi.list({ entityId: entityId.value, size: 500 })
+    const items = Array.isArray(data) ? data : (data?.content ?? [])
+    const EXPENSE_SUBTYPES = ['COGS','OPERATING_EXPENSES','DEPRECIATION','AMORTISATION','FINANCE_COST','TAX_EXPENSE']
+    const SUBTYPE_LABEL = {
+      COGS: 'Cost of Sales', OPERATING_EXPENSES: 'Operating Expenses',
+      DEPRECIATION: 'Depreciation', AMORTISATION: 'Amortisation',
+      FINANCE_COST: 'Finance Costs', TAX_EXPENSE: 'Tax Expense',
+    }
+    accountOpts.value = items
+      .filter(a => a.isActive !== false && EXPENSE_SUBTYPES.includes(a.accountSubtype))
+      .map(a => ({
+        value: a.accountCode,
+        label: `${a.accountCode} — ${a.accountName}`,
+        group: SUBTYPE_LABEL[a.accountSubtype] ?? a.accountSubtype,
+      }))
   } catch { /* silently skip */ }
 })
 
@@ -153,10 +185,12 @@ const newBillTotal = computed(() =>
 )
 
 async function submitNewBill() {
+  if (saving.value) return                          // hard guard — blocks re-entry before DOM disables the button
   if (!newBill.value.supplierName || !newBill.value.billDate) {
     toast.error('Supplier name and bill date are required.')
     return
   }
+  saving.value = true                               // set synchronously — any subsequent call hits the guard above
   const payload = {
     entityId: entityId.value,
     supplierId: newBill.value.supplierId || undefined,
@@ -176,9 +210,7 @@ async function submitNewBill() {
         accountCode: it.accountCode || undefined,
       })),
   }
-  saving.value = true
   try {
-    // client auto-unwraps ApiResponse<T> — resp is the bill directly
     const resp = await billsApi.create(payload)
     list.value.unshift(resp)
     createModal.value = false
@@ -380,8 +412,10 @@ function isOverdue(b) {
               :style="outstandingAmt(drawer) > 0 ? 'color:var(--danger)' : ''" readonly />
           </div>
           <div v-if="drawer.sourceDocumentId" class="field" style="grid-column:1/-1">
-            <label>Source Document ID</label>
-            <input class="input mono" type="text" :value="drawer.sourceDocumentId" readonly style="font-size:11px" />
+            <label>Source Document</label>
+            <input class="input mono" type="text"
+              :value="sourceDocList.find(d => d.value === drawer.sourceDocumentId)?.label ?? drawer.sourceDocumentId"
+              readonly style="font-size:12px" />
           </div>
         </div>
 
@@ -559,8 +593,22 @@ function isOverdue(b) {
           <input class="input" type="text" v-model="newBill.description" placeholder="Office supplies May 2026" />
         </div>
         <div class="field" style="grid-column:1/-1">
-          <label>Source Document ID <span style="color:var(--muted);font-size:11px">(optional UUID)</span></label>
-          <input class="input mono" type="text" v-model="newBill.sourceDocumentId" placeholder="Linked source document UUID" style="font-size:12px" />
+          <label>Source Document <span style="color:var(--muted);font-size:11px">(optional — attach an uploaded document)</span></label>
+          <SearchableSelect
+            v-if="sourceDocList.length"
+            v-model="newBill.sourceDocumentId"
+            :options="sourceDocList"
+            placeholder="Search uploaded source documents…"
+            search-placeholder="Type ref, type or supplier…"
+          />
+          <input
+            v-else
+            class="input mono"
+            type="text"
+            v-model="newBill.sourceDocumentId"
+            placeholder="Paste source document UUID"
+            style="font-size:12px"
+          />
         </div>
       </div>
 
@@ -569,39 +617,58 @@ function isOverdue(b) {
           <span class="section-label">Line Items</span>
           <Button variant="ghost" icon="plus" style="font-size:12px;padding:4px 8px" @click="addLine">Add line</Button>
         </div>
-        <table class="tbl" style="font-size:13px">
-          <thead>
-            <tr>
-              <th>Description</th>
-              <th>Account Code</th>
-              <th class="num" style="width:70px">Qty</th>
-              <th class="num" style="width:110px">Unit Price</th>
-              <th class="num" style="width:70px">Tax %</th>
-              <th class="num" style="width:110px">Line Total</th>
-              <th style="width:32px"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(item, i) in newBill.items" :key="i">
-              <td><input class="input" type="text" v-model="item.description" placeholder="Description" style="margin:0;padding:4px 6px" /></td>
-              <td><input class="input" type="text" v-model="item.accountCode" placeholder="5-2000" style="margin:0;padding:4px 6px;font-family:monospace" /></td>
-              <td><AmountInput class="input mono" v-model="item.quantity" style="margin:0;padding:4px 6px;text-align:right" /></td>
-              <td><AmountInput class="input mono" v-model="item.unitPrice" placeholder="0.00" style="margin:0;padding:4px 6px;text-align:right" /></td>
-              <td><input class="input mono" type="number" v-model="item.taxRate" min="0" max="100" step="1" placeholder="16" style="margin:0;padding:4px 6px;text-align:right" /></td>
-              <td class="num mono" style="font-weight:600">
-                {{ fmt(((parseFloat(item.quantity)||0)*(parseFloat(item.unitPrice)||0))*(1+(parseFloat(item.taxRate)||0)/100)) }}
-              </td>
-              <td><IconBtn icon="reject" style="color:var(--danger)" @click="removeLine(i)" /></td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr style="font-weight:700;font-size:14px">
-              <td colspan="5" class="num" style="color:var(--muted);font-size:12px">Total</td>
-              <td class="num mono">{{ newBill.currencyCode }} {{ fmt(newBillTotal) }}</td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+
+        <!-- Header row -->
+        <div class="li-grid li-head">
+          <div>Description</div>
+          <div>Account</div>
+          <div class="num">Qty</div>
+          <div class="num">Unit Price</div>
+          <div class="num">Tax %</div>
+          <div class="num">Total</div>
+          <div></div>
+        </div>
+
+        <!-- Item rows -->
+        <div v-for="(item, i) in newBill.items" :key="i" class="li-grid li-row">
+          <div>
+            <input class="input li-input" type="text" v-model="item.description" placeholder="Item description" />
+          </div>
+          <div>
+            <SearchableSelect
+              v-if="accountOpts.length"
+              v-model="item.accountCode"
+              :options="accountOpts"
+              placeholder="Select account…"
+              search-placeholder="Search code or name…"
+              :compact="true"
+              :mono="true"
+            />
+            <input v-else class="input li-input mono" type="text" v-model="item.accountCode" placeholder="5-2000" />
+          </div>
+          <div>
+            <AmountInput class="input li-input mono" v-model="item.quantity" style="text-align:right" />
+          </div>
+          <div>
+            <AmountInput class="input li-input mono" v-model="item.unitPrice" placeholder="0.00" style="text-align:right" />
+          </div>
+          <div>
+            <input class="input li-input mono" type="number" v-model="item.taxRate" min="0" max="100" step="1" placeholder="0" style="text-align:right" />
+          </div>
+          <div class="num mono li-total">
+            {{ fmt(((parseFloat(item.quantity)||0)*(parseFloat(item.unitPrice)||0))*(1+(parseFloat(item.taxRate)||0)/100)) }}
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center">
+            <IconBtn icon="reject" style="color:var(--danger)" @click="removeLine(i)" />
+          </div>
+        </div>
+
+        <!-- Total row -->
+        <div class="li-grid li-footer">
+          <div style="grid-column:1/6;text-align:right;font-size:12px;color:var(--muted)">Total</div>
+          <div class="num mono" style="font-weight:700;font-size:14px">{{ newBill.currencyCode }} {{ fmt(newBillTotal) }}</div>
+          <div></div>
+        </div>
       </div>
 
       <template #footer>
@@ -697,5 +764,44 @@ function isOverdue(b) {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
+}
+
+/* ── Line items grid (replaces overflow table) ───────────────────────────── */
+.li-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 220px 64px 90px 58px 90px 32px;
+  gap: 0 6px;
+  align-items: center;
+}
+.li-head {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+  padding: 4px 2px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.li-row {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-light, var(--border));
+}
+.li-row:last-of-type { border-bottom: none; }
+.li-footer {
+  padding: 8px 2px 0;
+  border-top: 2px solid var(--border);
+  margin-top: 2px;
+}
+.li-input {
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.li-total {
+  font-weight: 600;
+  font-size: 13px;
+  padding-right: 2px;
 }
 </style>

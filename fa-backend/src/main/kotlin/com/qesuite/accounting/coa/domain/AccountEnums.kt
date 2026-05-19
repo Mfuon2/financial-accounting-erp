@@ -13,8 +13,16 @@ enum class AccountType(val normalBalance: NormalBalance) {
 
 /**
  * §2.1 — Account Subtype Enum (IFRS-aligned)
+ *
+ * [normalBalanceOverride] allows contra-asset subtypes (e.g. ACCUMULATED_DEPRECIATION) to declare
+ * CREDIT normal balance even though their [parentType] is ASSET (DEBIT-normal). When null, the
+ * normal balance is derived from [parentType] as usual.
  */
-enum class AccountSubtype(val parentType: AccountType, val isMonetary: Boolean = false) {
+enum class AccountSubtype(
+    val parentType: AccountType,
+    val isMonetary: Boolean = false,
+    val normalBalanceOverride: NormalBalance? = null
+) {
     // ASSET Subtypes
     CASH_AND_EQUIVALENTS(AccountType.ASSET, true),
     CURRENT_RECEIVABLE(AccountType.ASSET, true),
@@ -24,6 +32,8 @@ enum class AccountSubtype(val parentType: AccountType, val isMonetary: Boolean =
     NON_CURRENT_INTANGIBLE(AccountType.ASSET, false),
     NON_CURRENT_INVESTMENT(AccountType.ASSET, false),
     NON_CURRENT_OTHER(AccountType.ASSET, false),
+    // Contra-asset: sits under NON_CURRENT_ASSETS on the balance sheet but has CREDIT normal balance
+    ACCUMULATED_DEPRECIATION(AccountType.ASSET, false, NormalBalance.CREDIT),
 
     // LIABILITY Subtypes
     CURRENT_PAYABLE(AccountType.LIABILITY, true),

@@ -77,7 +77,7 @@ class SourceDocumentService(
      */
     @Transactional
     @Auditable(action = AuditAction.UPDATE, resourceType = "SOURCE_DOCUMENT")
-    fun transitionStatus(@AuditResourceId id: UUID, nextStatus: SourceDocumentStatus) {
+    fun transitionStatus(@AuditResourceId id: UUID, nextStatus: SourceDocumentStatus): SourceDocument {
         val doc = findById(id)
         if (!doc.status.canTransitionTo(nextStatus)) {
             throw ValidationException(
@@ -91,7 +91,7 @@ class SourceDocumentService(
             )
         }
         doc.status = nextStatus
-        sourceDocumentRepository.save(doc)
+        return sourceDocumentRepository.save(doc)
     }
 
     fun classifyTransaction(payload: Any): ClassificationResult =

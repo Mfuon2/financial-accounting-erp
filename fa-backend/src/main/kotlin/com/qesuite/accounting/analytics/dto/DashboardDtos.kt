@@ -33,3 +33,15 @@ data class SparklineResponse(
     val cash: List<BigDecimal>,
     val labels: List<String>
 )
+
+@Schema(description = "Aggregated trial balance summary by account type — used by dashboard TB health widget")
+data class TbSummaryResponse(
+    val assets: BigDecimal,
+    val liabilities: BigDecimal,
+    val equity: BigDecimal,
+    val revenue: BigDecimal,
+    val expenses: BigDecimal,
+    val imbalance: BigDecimal,
+    val isBalanced: Boolean,
+    val asOfDate: String
+)

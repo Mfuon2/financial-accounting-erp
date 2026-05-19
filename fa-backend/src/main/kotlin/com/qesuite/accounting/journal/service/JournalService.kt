@@ -38,8 +38,11 @@ class JournalService(
     @Auditable(action = AuditAction.CREATE, resourceType = "JOURNAL_ENTRY")
     fun createEntry(command: CreateJournalEntryCommand): JournalEntry {
         val cfg = numberConfigService.resolveConfig(command.entityId, "JOURNAL_ENTRY")
+        // BUG-28: Scope the reference number to the fiscal year of the period, not the
+        // current calendar year, so JE-2025-0001 and JE-2026-0001 are independent sequences.
+        val periodYear = periodService.findById(command.periodId).startDate.year
         val reference = command.reference?.takeIf { it.isNotBlank() }
-            ?: codeGeneratorService.nextUniqueForConfig(command.entityId, cfg) { code ->
+            ?: codeGeneratorService.nextUniqueForConfig(command.entityId, cfg, fiscalYear = periodYear) { code ->
                 !journalEntryRepository.existsByEntityIdAndReference(command.entityId, code)
             }
         val entry = JournalEntry(
@@ -73,7 +76,7 @@ class JournalService(
 
     @Transactional
     @Auditable(action = AuditAction.POST, resourceType = "JOURNAL_ENTRY")
-    fun postEntry(@AuditResourceId entryId: UUID) {
+    fun postEntry(@AuditResourceId entryId: UUID): JournalEntry {
         val entry = findById(entryId)
 
         if (entry.status == JournalEntryStatus.POSTED) {
@@ -97,7 +100,7 @@ class JournalService(
         doubleEntryValidator.validate(entry)
         postingService.postJournalEntry(entry)
         entry.status = JournalEntryStatus.POSTED
-        journalEntryRepository.save(entry)
+        return journalEntryRepository.save(entry)
     }
 
     /**
@@ -151,7 +154,7 @@ class JournalService(
 
     @Transactional
     @Auditable(action = AuditAction.DELETE, resourceType = "JOURNAL_ENTRY")
-    fun deleteEntry(@AuditResourceId entryId: UUID) {
+    fun deleteEntry(@AuditResourceId entryId: UUID): JournalEntry {
         val entry = findById(entryId)
         if (entry.status == JournalEntryStatus.POSTED) {
             throw ImmutableRecordException(
@@ -161,6 +164,7 @@ class JournalService(
             )
         }
         journalEntryRepository.delete(entry)
+        return entry
     }
 
     @Transactional(readOnly = true)
@@ -170,28 +174,26 @@ class JournalService(
 
     @Transactional
     @Auditable(action = AuditAction.UPDATE, resourceType = "JOURNAL_ENTRY")
-    fun submitEntry(@AuditResourceId entryId: UUID) {
+    fun submitEntry(@AuditResourceId entryId: UUID): JournalEntry {
         val entry = findById(entryId)
         if (entry.status != JournalEntryStatus.DRAFT) {
             throw ValidationException("INVALID_STATUS", "Only DRAFT entries can be submitted.")
         }
         doubleEntryValidator.validate(entry)
         entry.status = JournalEntryStatus.PENDING_APPROVAL
-        journalEntryRepository.save(entry)
+        return journalEntryRepository.save(entry)
     }
 
     @Transactional
     @Auditable(action = AuditAction.REJECT, resourceType = "JOURNAL_ENTRY")
-    fun rejectEntry(@AuditResourceId entryId: UUID, reason: String) {
+    fun rejectEntry(@AuditResourceId entryId: UUID, reason: String): JournalEntry {
         val entry = findById(entryId)
         if (entry.status != JournalEntryStatus.PENDING_APPROVAL) {
             throw ValidationException("INVALID_STATUS", "Only PENDING_APPROVAL entries can be rejected.")
         }
         entry.status = JournalEntryStatus.DRAFT
-        // Append the rejection reason to the description so it is preserved on the
-        // entry itself and visible in any journal listing — no schema change required.
         entry.description = "[REJECTED: $reason] ${entry.description.orEmpty()}".trim()
-        journalEntryRepository.save(entry)
+        return journalEntryRepository.save(entry)
     }
 
     /**

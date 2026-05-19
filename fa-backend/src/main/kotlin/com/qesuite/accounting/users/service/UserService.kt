@@ -82,6 +82,17 @@ class UserService(
 
         val isFirstUser = userRepository.countByEntityId(command.entityId) == 0L
 
+        // Admin-created users (createdBy != SYSTEM_BOOTSTRAP_ID) are activated immediately
+        // since a trusted admin is creating the account on their behalf.
+        // Self-registered users (createdBy == SYSTEM_BOOTSTRAP_ID) start as PENDING_VERIFICATION
+        // until their email is verified.
+        val isAdminCreated = !isFirstUser && command.createdBy != SYSTEM_BOOTSTRAP_ID
+        val initialStatus = when {
+            isFirstUser    -> UserStatus.ACTIVE           // bootstrap admin — always ACTIVE
+            isAdminCreated -> UserStatus.ACTIVE           // admin-provisioned user — ACTIVE immediately
+            else           -> UserStatus.PENDING_VERIFICATION  // self-registered — needs email verification
+        }
+
         val passwordHash = passwordEncoder.encode(command.rawPassword)
         val actorId = if (isFirstUser) SYSTEM_BOOTSTRAP_ID else command.createdBy
 
@@ -91,9 +102,9 @@ class UserService(
             email = command.email,
             passwordHash = passwordHash,
             role = if (isFirstUser) UserRole.SYSTEM_ADMIN else command.role,
-            status = if (isFirstUser) UserStatus.ACTIVE else UserStatus.PENDING_VERIFICATION,
-            emailVerified = isFirstUser,
-            emailVerifiedAt = if (isFirstUser) Instant.now() else null,
+            status = initialStatus,
+            emailVerified = isFirstUser || isAdminCreated,
+            emailVerifiedAt = if (isFirstUser || isAdminCreated) Instant.now() else null,
             mustChangePassword = false,
             createdBy = actorId,
             modifiedBy = actorId
@@ -508,6 +519,10 @@ class UserService(
     @Transactional(readOnly = true)
     fun findByEntityAndStatus(entityId: UUID, status: UserStatus, pageable: Pageable): Page<User> =
         userRepository.findByEntityIdAndStatus(entityId, status, pageable)
+
+    @Transactional(readOnly = true)
+    fun countActiveByEntity(entityId: UUID): Long =
+        userRepository.countByEntityIdAndStatus(entityId, UserStatus.ACTIVE)
 
     // ─────────────────────────────────────────────────────────────────────────
     // Private helpers

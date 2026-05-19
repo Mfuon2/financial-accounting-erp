@@ -1,9 +1,12 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { TAX_CODES, CURRENCIES, FX_RATES } from '@/data/index.js'
+import { ref, onMounted, computed } from 'vue'
+import { TAX_CODES } from '@/data/index.js'
 import { tax, fx } from '@/api/index.js'
+import { isDemo } from '@/composables/useAppMode.js'
 import { fmtDate } from '@/utils/format.js'
 import { useToast } from '@/composables/useToast.js'
+import { currentUser } from '@/composables/useAuth.js'
+import { useAccountCache } from '@/composables/useAccountCache.js'
 import PageHeader from '@/components/PageHeader.vue'
 import Button from '@/components/primitives/Button.vue'
 import Badge from '@/components/primitives/Badge.vue'
@@ -19,18 +22,27 @@ const TAX_TYPE_OPTIONS = [
 ]
 
 const { toast } = useToast()
+const entityId = computed(() => currentUser.value?.entityId ?? null)
+const acctCache = useAccountCache()
+const accountOptions = computed(() =>
+  acctCache.accounts.value.map(a => ({
+    value: a.accountCode,
+    label: `${a.accountCode} — ${a.accountName}`,
+  }))
+)
 
 const tab = ref('tax')
-const tabs = [
-  { id: 'tax', label: 'Tax codes',  count: TAX_CODES.length },
-  { id: 'ccy', label: 'Currencies', count: CURRENCIES.length },
-  { id: 'fx',  label: 'FX rates',   count: FX_RATES.length },
-]
 const newLabel = { tax: 'New tax code', ccy: 'New currency', fx: 'New FX rate' }
 
-const taxList = ref([...TAX_CODES])
-const ccyList = ref([...CURRENCIES])
-const fxList  = ref([...FX_RATES])
+const taxList = ref(isDemo.value ? [...TAX_CODES] : [])
+const ccyList = ref([])
+const fxList  = ref([])
+
+const tabs = computed(() => [
+  { id: 'tax', label: 'Tax codes',  count: taxList.value.length },
+  { id: 'ccy', label: 'Currencies', count: ccyList.value.length },
+  { id: 'fx',  label: 'FX rates',   count: fxList.value.length },
+])
 
 // Edit state
 const editItem = ref(null)
@@ -59,20 +71,38 @@ function toArray(v) {
 }
 
 onMounted(async () => {
-  try {
-    const [t, c, r] = await Promise.all([tax.list(), fx.currencies(), fx.rates()])
-    if (t) taxList.value = toArray(t).length ? toArray(t) : taxList.value
-    if (c) ccyList.value = toArray(c).length ? toArray(c) : ccyList.value
-    if (r) fxList.value  = toArray(r).length ? toArray(r) : fxList.value
-  } catch { /* stays on static data */ }
+  const eid = entityId.value
+  if (!eid) return
+  const [tRes, cRes, fRes] = await Promise.allSettled([tax.list(eid), fx.currencies(eid), fx.listRates(eid)])
+  if (tRes.status === 'fulfilled' && tRes.value) {
+    const list = toArray(tRes.value)
+    if (list.length) taxList.value = list
+  }
+  if (cRes.status === 'fulfilled' && cRes.value) {
+    ccyList.value = toArray(cRes.value)
+  }
+  if (fRes.status === 'fulfilled' && fRes.value) {
+    fxList.value = toArray(fRes.value)
+  }
 })
 
 // ── Edit ────────────────────────────────────────────────────────────────────
 
 function openEdit(item, type) {
   editItem.value = { ...item, _type: type }
-  if (type === 'tax') editForm.value = { description: item.description ?? '', isRecoverable: item.isRecoverable ?? true }
-  if (type === 'ccy') editForm.value = { currencyName: item.name ?? item.currencyName }
+  if (type === 'tax') editForm.value = {
+    name:          item.name ?? '',
+    description:   item.description ?? '',
+    taxType:       item.taxType ?? item.type ?? 'OUTPUT',
+    accountCode:   item.accountCode ?? '',
+    isRecoverable: item.isRecoverable ?? true,
+    isActive:      item.isActive ?? item.active ?? true,
+  }
+  if (type === 'ccy') editForm.value = {
+    currencyName: item.currencyName ?? item.name ?? '',
+    symbol:   item.symbol ?? '',
+    decimals: item.decimals ?? 2,
+  }
   if (type === 'fx')  editForm.value = { rateValue: item.rate ?? item.rateValue }
 }
 
@@ -84,14 +114,25 @@ async function saveEdit() {
   try {
     const type = editItem.value._type
     if (type === 'tax') {
-      await tax.update(editItem.value.id ?? editItem.value.code, editForm.value)
+      await tax.update(editItem.value.id ?? editItem.value.code, {
+        name:          editForm.value.name || null,
+        description:   editForm.value.description || null,
+        taxType:       editForm.value.taxType || null,
+        accountCode:   editForm.value.accountCode || null,
+        isRecoverable: editForm.value.isRecoverable,
+        isActive:      editForm.value.isActive,
+      })
       const idx = taxList.value.findIndex(t => (t.id ?? t.code) === (editItem.value.id ?? editItem.value.code))
       if (idx !== -1) taxList.value[idx] = { ...taxList.value[idx], ...editForm.value }
       toast.success('Tax code updated.')
     } else if (type === 'ccy') {
-      await fx.updateCurrency(editItem.value.id ?? editItem.value.code, editForm.value)
-      const idx = ccyList.value.findIndex(c => (c.id ?? c.code) === (editItem.value.id ?? editItem.value.code))
-      if (idx !== -1) ccyList.value[idx] = { ...ccyList.value[idx], name: editForm.value.currencyName, currencyName: editForm.value.currencyName }
+      await fx.updateCurrency(editItem.value.id, {
+        currencyName: editForm.value.currencyName,
+        symbol:   editForm.value.symbol || null,
+        decimals: editForm.value.decimals != null ? Number(editForm.value.decimals) : null,
+      })
+      const idx = ccyList.value.findIndex(c => c.id === editItem.value.id)
+      if (idx !== -1) ccyList.value[idx] = { ...ccyList.value[idx], currencyName: editForm.value.currencyName, symbol: editForm.value.symbol, decimals: Number(editForm.value.decimals) }
       toast.success('Currency updated.')
     } else if (type === 'fx') {
       await fx.updateRate(editItem.value.id, editForm.value)
@@ -103,15 +144,6 @@ async function saveEdit() {
   } catch { /* handled by apiFetch */ } finally {
     saving.value = false
   }
-}
-
-async function toggleTax(item) {
-  try {
-    await tax.toggle(item.id ?? item.code)
-    const idx = taxList.value.findIndex(t => (t.id ?? t.code) === (item.id ?? item.code))
-    if (idx !== -1) taxList.value[idx] = { ...taxList.value[idx], active: !taxList.value[idx].active }
-    toast.success(`${item.code ?? item.name} ${taxList.value[idx]?.active ? 'activated' : 'deactivated'}.`)
-  } catch { /* handled */ }
 }
 
 // ── New ─────────────────────────────────────────────────────────────────────
@@ -131,13 +163,14 @@ async function createNew() {
         toast.warn('Code, name and rate are required.'); return
       }
       const body = {
-        code: newTax.value.code.toUpperCase().trim(),
-        name: newTax.value.name.trim(),
-        type: newTax.value.type,
-        rate: Number(newTax.value.ratePct) / 100,
-        accountCode: newTax.value.accountCode || undefined,
-        recoverable: newTax.value.recoverable,
-        active: true,
+        entityId:      entityId.value,
+        code:          newTax.value.code.toUpperCase().trim(),
+        name:          newTax.value.name.trim() || null,
+        taxType:       newTax.value.type,
+        accountCode:   newTax.value.accountCode || null,
+        isRecoverable: newTax.value.recoverable,
+        rate:          newTax.value.ratePct !== '' ? Number(newTax.value.ratePct) / 100 : null,
+        effectiveFrom: new Date().toISOString().slice(0, 10),
       }
       const created = await tax.create(body)
       taxList.value.unshift(created ?? body)
@@ -149,15 +182,16 @@ async function createNew() {
         toast.warn('Code, name and symbol are required.'); return
       }
       const body = {
-        code: newCcy.value.code.toUpperCase().trim(),
-        name: newCcy.value.name.trim(),
-        symbol: newCcy.value.symbol.trim(),
-        decimals: Number(newCcy.value.decimals),
-        functional: newCcy.value.functional,
+        entityId:     entityId.value,
+        currencyCode: newCcy.value.code.toUpperCase().trim(),
+        currencyName: newCcy.value.name.trim(),
+        symbol:       newCcy.value.symbol.trim() || null,
+        decimals:     Number(newCcy.value.decimals),
+        isFunctional: newCcy.value.functional,
       }
       const created = await fx.createCurrency(body)
-      ccyList.value.unshift(created ?? body)
-      toast.success(`Currency ${body.code} added.`)
+      ccyList.value.unshift(created ?? { ...body, code: body.currencyCode, name: body.currencyName })
+      toast.success(`Currency ${body.currencyCode} added.`)
       showNew.value = false
 
     } else {
@@ -187,7 +221,7 @@ function exportCsv() {
   let headers, rows, filename
   if (tab.value === 'tax') {
     headers  = ['code','name','type','rate_pct','account_code','recoverable','active']
-    rows     = taxList.value.map(t => [t.code, t.name, t.type, ((t.rate ?? 0)*100).toFixed(2), t.account ?? t.accountCode ?? '', t.isRecoverable ?? true, t.active])
+    rows     = taxList.value.map(t => [t.code, t.name ?? t.description ?? '', t.taxType ?? t.type ?? '', (((t.currentRate ?? t.rate) ?? 0)*100).toFixed(2), t.accountCode ?? t.account ?? '', t.isRecoverable ?? true, t.isActive ?? t.active ?? true])
     filename = 'tax-codes.csv'
   } else if (tab.value === 'ccy') {
     headers  = ['code','name','symbol','decimals','functional']
@@ -365,14 +399,16 @@ async function runImport() {
           <tbody>
             <tr v-for="t in taxList" :key="t.code">
               <td><span class="code-cell">{{ t.code }}</span></td>
-              <td>{{ t.name }}</td>
-              <td><Badge status="info" :dot="false">{{ t.type }}</Badge></td>
-              <td class="num">{{ ((t.rate ?? 0) * 100).toFixed(0) }}%</td>
-              <td>{{ t.account ?? t.accountCode ?? '—' }}</td>
-              <td><Badge :status="t.active ? 'active' : 'inactive'" :dot="false" /></td>
-              <td style="display:flex;gap:6px;align-items:center">
+              <td>{{ t.name ?? t.description ?? '—' }}</td>
+              <td>
+                <Badge v-if="t.taxType ?? t.type" status="info" :dot="false">{{ t.taxType ?? t.type }}</Badge>
+                <span v-else style="color:var(--muted)">—</span>
+              </td>
+              <td class="num">{{ (((t.currentRate ?? t.rate) ?? 0) * 100).toFixed(0) }}%</td>
+              <td>{{ t.accountCode ?? t.account ?? '—' }}</td>
+              <td><Badge :status="(t.isActive ?? t.active) ? 'active' : 'inactive'" :dot="false" /></td>
+              <td>
                 <Button variant="ghost" size="sm" icon="edit" @click="openEdit(t, 'tax')">Edit</Button>
-                <Button variant="ghost" size="sm" @click="toggleTax(t)">{{ t.active ? 'Disable' : 'Enable' }}</Button>
               </td>
             </tr>
           </tbody>
@@ -393,13 +429,13 @@ async function runImport() {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="c in ccyList" :key="c.code">
-              <td><span class="code-cell">{{ c.code }}</span></td>
-              <td>{{ c.name ?? c.currencyName }}</td>
-              <td>{{ c.symbol }}</td>
-              <td class="num">{{ c.decimals }}</td>
+            <tr v-for="c in ccyList" :key="c.id ?? c.currencyCode ?? c.code">
+              <td><span class="code-cell">{{ c.currencyCode ?? c.code }}</span></td>
+              <td>{{ c.currencyName ?? c.name }}</td>
+              <td>{{ c.symbol ?? '—' }}</td>
+              <td class="num">{{ c.decimals ?? 2 }}</td>
               <td>
-                <Badge v-if="c.functional || c.isFunctional" status="active" :dot="false">Functional</Badge>
+                <Badge v-if="c.isFunctional || c.functional" status="active" :dot="false">Functional</Badge>
                 <Badge v-else status="info" :dot="false">Foreign</Badge>
               </td>
               <td>
@@ -442,31 +478,65 @@ async function runImport() {
     <!-- Edit modal -->
     <Modal
       :open="!!editItem"
-      :title="editItem?._type === 'fx' ? `Edit FX Rate — ${editItem?.from ?? editItem?.fromCurrency}/${editItem?.to ?? editItem?.toCurrency}` : `Edit — ${editItem?.code}`"
+      :title="editItem?._type === 'fx' ? `Edit FX Rate — ${editItem?.from ?? editItem?.fromCurrency}/${editItem?.to ?? editItem?.toCurrency}` : `Edit — ${editItem?.currencyCode ?? editItem?.code ?? editItem?.taxCode}`"
       :width="420"
       @close="closeEdit"
     >
       <template v-if="editForm">
         <template v-if="editItem._type === 'tax'">
-          <div class="field">
-            <label>Description</label>
-            <input class="input" v-model="editForm.description" placeholder="Optional description" />
-          </div>
-          <div class="field" style="margin-top:12px">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input type="checkbox" v-model="editForm.isRecoverable" />
-              <span>Input tax is recoverable (e.g. claimable VAT input credit)</span>
-            </label>
+          <div class="form-grid cols-2">
+            <div class="field" style="grid-column:span 2">
+              <label>Name</label>
+              <input class="input" v-model="editForm.name" placeholder="e.g. VAT Standard 16%" />
+            </div>
+            <div class="field">
+              <label>Type</label>
+              <SearchableSelect v-model="editForm.taxType" :options="TAX_TYPE_OPTIONS" placeholder="Select type" />
+            </div>
+            <div class="field">
+              <label>Linked account</label>
+              <SearchableSelect
+                v-model="editForm.accountCode"
+                :options="accountOptions"
+                placeholder="Search account…"
+              />
+            </div>
+            <div class="field" style="grid-column:span 2">
+              <label>Description</label>
+              <input class="input" v-model="editForm.description" placeholder="Optional description" />
+            </div>
+            <div class="field" style="grid-column:span 2">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" v-model="editForm.isRecoverable" />
+                <span>Input tax is recoverable (claimable VAT input credit)</span>
+              </label>
+            </div>
+            <div class="field" style="grid-column:span 2">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" v-model="editForm.isActive" />
+                <span>Active (uncheck to deactivate this tax code)</span>
+              </label>
+            </div>
           </div>
           <div class="info-box">
-            <strong>Note:</strong> Tax code, name, and rate are immutable once the code is in use. These changes are audit-logged.
+            <strong>Note:</strong> Tax code and rate are immutable once the code is in use. To change the rate, add a new rate entry under the Rates tab. These changes are audit-logged.
           </div>
         </template>
 
         <template v-else-if="editItem._type === 'ccy'">
-          <div class="field">
-            <label>Currency name</label>
-            <input class="input" v-model="editForm.currencyName" placeholder="e.g. Kenyan Shilling" />
+          <div class="form-grid cols-2">
+            <div class="field" style="grid-column:span 2">
+              <label>Currency name</label>
+              <input class="input" v-model="editForm.currencyName" placeholder="e.g. Kenyan Shilling" />
+            </div>
+            <div class="field">
+              <label>Symbol</label>
+              <input class="input" v-model="editForm.symbol" placeholder="e.g. KSh" />
+            </div>
+            <div class="field">
+              <label>Decimal places</label>
+              <input class="input" type="number" min="0" max="6" v-model="editForm.decimals" />
+            </div>
           </div>
           <div class="info-box">
             <strong>Note:</strong> Currency code and functional status cannot be changed after registration.
@@ -521,8 +591,12 @@ async function runImport() {
             <input class="input" type="number" step="0.01" min="0" max="100" v-model="newTax.ratePct" placeholder="16" />
           </div>
           <div class="field" style="grid-column:span 2">
-            <label>Linked account code</label>
-            <input class="input mono" v-model="newTax.accountCode" placeholder="2310" />
+            <label>Linked account</label>
+            <SearchableSelect
+              v-model="newTax.accountCode"
+              :options="accountOptions"
+              placeholder="Search account…"
+            />
           </div>
           <div class="field" style="grid-column:span 2">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer">

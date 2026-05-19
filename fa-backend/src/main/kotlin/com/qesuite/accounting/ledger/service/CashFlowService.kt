@@ -133,7 +133,12 @@ class CashFlowService(
         //    Capital expenditure = net movement in NON_CURRENT_ASSETS accounts.
         //    An increase in non-current assets is a cash outflow (negate).
         // ─────────────────────────────────────────────────────────────
-        val nonCurrentAssets = accounts.filter { it.ifrsCategory == IfrsCategory.NON_CURRENT_ASSETS }
+        // Exclude accumulated depreciation (contra-asset) accounts — they represent non-cash write-downs,
+        // not capital expenditure cash outflows (IAS 7 §16).
+        val nonCurrentAssets = accounts.filter {
+            it.ifrsCategory == IfrsCategory.NON_CURRENT_ASSETS &&
+            it.accountSubtype != AccountSubtype.ACCUMULATED_DEPRECIATION
+        }
         val nonCurrentAssetMovement = nonCurrentAssets
             .sumOf { account ->
                 val debits = ledgerEntryRepository

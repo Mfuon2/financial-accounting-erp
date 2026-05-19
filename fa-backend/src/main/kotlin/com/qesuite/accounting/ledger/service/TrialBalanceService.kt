@@ -21,6 +21,15 @@ class TrialBalanceService(
         val date = asOfDate ?: LocalDate.now()
         val accounts = accountRepository.findAllByEntityId(entityId)
 
+        val accountById = accounts.associateBy { it.id }
+        fun depth(id: UUID, visited: MutableSet<UUID> = mutableSetOf()): Int {
+            if (id in visited) return 0
+            visited.add(id)
+            val acc = accountById[id] ?: return 0
+            val parentId = acc.parentAccountId ?: return 0
+            return 1 + depth(parentId, visited)
+        }
+
         var rawTotalDebits = BigDecimal.ZERO
         var rawTotalCredits = BigDecimal.ZERO
 
@@ -37,11 +46,27 @@ class TrialBalanceService(
                 credits.subtract(debits)
             }
 
+            // Accounts with abnormal balances (opposite to their normal side) appear on the
+            // opposite column. This keeps the displayed TB totals balanced while clearly
+            // flagging the anomaly to the reviewer.
+            val debitBalance = when {
+                account.normalBalance == NormalBalance.DEBIT  && netBalance > BigDecimal.ZERO -> netBalance
+                account.normalBalance == NormalBalance.CREDIT && netBalance < BigDecimal.ZERO -> netBalance.negate()
+                else -> BigDecimal.ZERO
+            }
+            val creditBalance = when {
+                account.normalBalance == NormalBalance.CREDIT && netBalance > BigDecimal.ZERO -> netBalance
+                account.normalBalance == NormalBalance.DEBIT  && netBalance < BigDecimal.ZERO -> netBalance.negate()
+                else -> BigDecimal.ZERO
+            }
+
             TrialBalanceRow(
                 accountCode   = account.accountCode,
                 accountName   = account.accountName,
-                debitBalance  = if (account.normalBalance == NormalBalance.DEBIT  && netBalance > BigDecimal.ZERO) netBalance else BigDecimal.ZERO,
-                creditBalance = if (account.normalBalance == NormalBalance.CREDIT && netBalance > BigDecimal.ZERO) netBalance else BigDecimal.ZERO
+                isHeader      = account.isHeader,
+                depth         = depth(account.id),
+                debitBalance  = debitBalance,
+                creditBalance = creditBalance
             )
         }
 
@@ -79,6 +104,8 @@ class TrialBalanceService(
             ComparativeRow(
                 accountCode    = row.accountCode,
                 accountName    = row.accountName,
+                isHeader       = row.isHeader,
+                depth          = row.depth,
                 currentDebit   = row.debitBalance,
                 currentCredit  = row.creditBalance,
                 priorDebit     = p?.debitBalance  ?: BigDecimal.ZERO,
@@ -112,6 +139,8 @@ data class TrialBalanceReport(
 data class TrialBalanceRow(
     val accountCode: String,
     val accountName: String,
+    val isHeader: Boolean,
+    val depth: Int,
     val debitBalance: BigDecimal,
     val creditBalance: BigDecimal
 )
@@ -130,6 +159,8 @@ data class ComparativeTrialBalanceReport(
 data class ComparativeRow(
     val accountCode: String,
     val accountName: String,
+    val isHeader: Boolean,
+    val depth: Int,
     val currentDebit: BigDecimal,
     val currentCredit: BigDecimal,
     val priorDebit: BigDecimal,

@@ -43,13 +43,16 @@ export const routes = [
       { path: '/comparative', component: () => import('@/views/reports/ComparativeTB.vue') },
       { path: '/bills',       component: () => import('@/views/payables/Bills.vue') },
       { path: '/ap-ageing',   component: () => import('@/views/payables/APAgeing.vue') },
+      { path: '/profile',      component: () => import('@/views/setup/Profile.vue') },
       { path: '/organization',component: () => import('@/views/setup/Organization.vue') },
       { path: '/users',       component: () => import('@/views/setup/Users.vue') },
       { path: '/api-keys',    component: () => import('@/views/setup/ApiKeys.vue') },
       { path: '/tax',         component: () => import('@/views/setup/TaxCurrency.vue') },
       { path: '/security',    component: () => import('@/views/setup/Security.vue') },
+      { path: '/setup-health', component: () => import('@/views/setup/SetupHealth.vue') },
     ],
   },
+  { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFound.vue') },
 ]
 
 export const CRUMBS = {
@@ -82,11 +85,13 @@ export const CRUMBS = {
   '/comparative':   ['Reports', 'Comparative TB'],
   '/bills':         ['Payables', 'Vendor Bills'],
   '/ap-ageing':     ['Payables', 'AP Ageing'],
+  '/profile':       ['Setup', 'My Profile'],
   '/organization':  ['Setup', 'Organization'],
   '/users':         ['Setup', 'Users'],
   '/api-keys':      ['Setup', 'API Keys'],
   '/tax':           ['Setup', 'Tax & Currency'],
   '/security':      ['Setup', 'Security'],
+  '/setup-health':  ['Setup', 'System Health'],
 }
 
 /**

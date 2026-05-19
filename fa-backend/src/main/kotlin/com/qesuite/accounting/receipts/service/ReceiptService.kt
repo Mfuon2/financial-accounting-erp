@@ -34,6 +34,8 @@ class ReceiptService(
     private val paymentRepository: PaymentRepository,
     private val journalEntryRepository: JournalEntryRepository,
     private val emailService: EmailService,
+    private val codeGeneratorService: com.qesuite.accounting.shared.codegen.service.CodeGeneratorService,
+    private val entityNumberConfigService: com.qesuite.accounting.shared.codegen.service.EntityNumberConfigService,
 ) {
 
     /**
@@ -96,12 +98,12 @@ class ReceiptService(
             )
         }
 
-        // 4. Generate a unique receipt number: RCT-{YYYY}-{entityCode4}-{seqPadded6}-{collision4}
-        val year = Year.now().value
-        val entityCode = entityId.toString().replace("-", "").take(4).uppercase()
-        val seq = receiptRepository.countByEntityId(entityId) + 1L
-        val collision = java.util.UUID.randomUUID().toString().replace("-","").take(4).uppercase()
-        val receiptNumber = "RCT-$year-$entityCode-${seq.toString().padStart(6, '0')}-$collision"
+        // 4. Generate a unique receipt number using the entity's configured format.
+        val rctConfig = entityNumberConfigService.resolveConfig(entityId, "RECEIPT")
+        val receiptNumber = codeGeneratorService.nextUnique(
+            entityId, rctConfig.prefix, rctConfig.yearScoped,
+            customFormat = rctConfig.customFormat,
+        ) { !receiptRepository.existsByEntityIdAndReceiptNumber(entityId, it) }
 
         // 5. Create and persist the receipt in POSTED status.
         val receipt = Receipt(

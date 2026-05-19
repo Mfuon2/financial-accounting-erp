@@ -9,6 +9,8 @@ export const auth = {
   sessions:        ()        => isDemo.value ? Promise.resolve(SESSIONS)                            : get('/api/v1/auth/sessions'),
   revokeSession:   (id)      => isDemo.value ? Promise.resolve()                                    : del(`/api/v1/auth/sessions/${id}`),
   revokeAllOthers: ()        => isDemo.value ? Promise.resolve()                                    : post('/api/v1/auth/sessions/revoke-all-others', {}),
-  changePassword:  (body)    => isDemo.value ? Promise.resolve()                                    : post('/api/v1/auth/change-password', body),
-  resetPassword:   (body)    => isDemo.value ? Promise.resolve()                                    : post('/api/v1/auth/reset-password', body),
+  changePassword:  (body)    => isDemo.value ? Promise.resolve()  : post('/api/v1/auth/change-password', body),
+  resetPassword:   (body)    => isDemo.value ? Promise.resolve()  : post('/api/v1/auth/reset-password', body),
+  forgotPassword:  (body)    => isDemo.value ? Promise.resolve()  : post('/api/v1/auth/forgot-password', body),
+  verifyEmail:     (userId)  => isDemo.value ? Promise.resolve()  : post(`/api/v1/auth/verify-email/${userId}`),
 }

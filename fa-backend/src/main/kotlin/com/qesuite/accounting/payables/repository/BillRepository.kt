@@ -54,4 +54,6 @@ interface BillRepository : JpaRepository<Bill, UUID> {
     ): List<Bill>
 
     fun findAllByIdIn(ids: List<UUID>): List<Bill>
+
+    fun findBySupplierIdAndIsActiveTrueOrderByBillDateAsc(supplierId: UUID): List<Bill>
 }

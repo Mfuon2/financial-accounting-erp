@@ -18,9 +18,21 @@ class TaxCode(
     @Schema(example = "VAT_16")
     var code: String,
 
+    @Column(name = "name", length = 100)
+    @Schema(example = "VAT Standard 16%")
+    var name: String?,
+
     @Column(name = "description")
-    @Schema(example = "Value Added Tax 16%")
+    @Schema(example = "Value Added Tax 16% (Kenya)")
     var description: String?,
+
+    @Column(name = "tax_type", length = 20)
+    @Schema(example = "OUTPUT", description = "OUTPUT, INPUT, EXEMPT, or WHT")
+    var taxType: String?,
+
+    @Column(name = "account_code", length = 20)
+    @Schema(example = "2-2100")
+    var accountCode: String?,
 
     @Column(name = "is_recoverable", nullable = false)
     @Schema(description = "True if the tax can be claimed back (Input VAT)")

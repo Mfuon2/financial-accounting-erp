@@ -46,7 +46,6 @@ export const reports = {
   closingPreview:   (params)         => isDemo.value ? Promise.resolve(DEMO_CLOSING_PREVIEW) : get(`/api/v1/closing/preview?${new URLSearchParams(params)}`),
   runClosing:       (params)         => isDemo.value ? Promise.resolve({})               : post(`/api/v1/closing/run?${new URLSearchParams(params)}`, {}),
   reopenPeriod:     (params)         => isDemo.value ? Promise.resolve({})               : post(`/api/v1/closing/reopen?${new URLSearchParams(params)}`, {}),
-  generalLedger:    (params)         => isDemo.value ? Promise.resolve([])               : get(`/api/v1/reports/general-ledger?${new URLSearchParams(params)}`),
   pdfBalanceSheet:  (params, fname)  => isDemo.value ? Promise.resolve()                 : downloadFile(`/api/v1/statements/balance-sheet/pdf?${new URLSearchParams(params)}`, fname ?? 'balance-sheet.pdf'),
   pdfPnl:           (params, fname)  => isDemo.value ? Promise.resolve()                 : downloadFile(`/api/v1/statements/profit-loss/pdf?${new URLSearchParams(params)}`, fname ?? 'profit-loss.pdf'),
   pdfCashFlow:      (params, fname)  => isDemo.value ? Promise.resolve()                 : downloadFile(`/api/v1/statements/cash-flow/pdf?${new URLSearchParams(params)}`, fname ?? 'cash-flow.pdf'),

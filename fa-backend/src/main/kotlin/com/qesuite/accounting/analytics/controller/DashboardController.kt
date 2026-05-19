@@ -2,6 +2,7 @@ package com.qesuite.accounting.analytics.controller
 
 import com.qesuite.accounting.analytics.dto.DashboardSummaryResponse
 import com.qesuite.accounting.analytics.dto.SparklineResponse
+import com.qesuite.accounting.analytics.dto.TbSummaryResponse
 import com.qesuite.accounting.analytics.service.DashboardService
 import com.qesuite.accounting.shared.exceptions.ApiResponse
 import com.qesuite.accounting.shared.security.SecurityUtils
@@ -44,5 +45,15 @@ class DashboardController(
     fun sparklines(): ApiResponse<SparklineResponse> {
         val entityId = SecurityUtils.currentEntityIdOrSystem()
         return ApiResponse.success(dashboardService.getSparklines(entityId))
+    }
+
+    @GetMapping("/tb-summary")
+    @Operation(
+        summary = "Trial balance summary by account type",
+        description = "Returns aggregated net balances per account type (Assets, Liabilities, Equity, Revenue, Expenses) as of today, plus a balanced flag."
+    )
+    fun tbSummary(): ApiResponse<TbSummaryResponse> {
+        val entityId = SecurityUtils.currentEntityIdOrSystem()
+        return ApiResponse.success(dashboardService.getTbSummary(entityId))
     }
 }

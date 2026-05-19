@@ -8,6 +8,6 @@ export const customers = {
   create:     (body)       => isDemo.value ? Promise.resolve({ ...body, id: String(Date.now()), isActive: true })     : post('/api/v1/customers', body),
   update:     (id, body)   => isDemo.value ? Promise.resolve({ ...body, id })                                         : put(`/api/v1/customers/${id}`, body),
   deactivate: (id, body)   => isDemo.value ? Promise.resolve({ id, isActive: false })                                 : post(`/api/v1/customers/${id}/deactivate`, body),
-  arAgeing:   ()           => isDemo.value ? Promise.resolve(AR_AGEING)                                               : get('/api/v1/customers/ar-ageing'),
-  statement:  (id)         => isDemo.value ? Promise.resolve([])                                                      : get(`/api/v1/customers/${id}/statement`),
+  // AR_AGEING is now the structured object matching backend ArAgeingResponse
+  arAgeing:   (params)     => isDemo.value ? Promise.resolve(AR_AGEING)                                               : get(`/api/v1/customers/ar-ageing?${new URLSearchParams(params ?? {})}`),
 }

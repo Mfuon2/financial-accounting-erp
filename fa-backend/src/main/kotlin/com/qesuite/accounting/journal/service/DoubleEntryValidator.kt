@@ -1,5 +1,6 @@
 package com.qesuite.accounting.journal.service
 
+import com.qesuite.accounting.coa.repository.AccountRepository
 import com.qesuite.accounting.journal.domain.JournalEntry
 import com.qesuite.accounting.shared.exceptions.ValidationException
 import org.springframework.stereotype.Component
@@ -8,7 +9,9 @@ import org.springframework.stereotype.Component
  * §4.2 — Double-Entry Validator
  */
 @Component
-class DoubleEntryValidator {
+class DoubleEntryValidator(
+    private val accountRepository: AccountRepository
+) {
 
     fun validate(entry: JournalEntry) {
         if (entry.lines.size < 2) {
@@ -38,6 +41,20 @@ class DoubleEntryValidator {
         }
         
         // Ensure no line has both debit and credit, and each line carries a positive amount
+        // Header account check — batch-load to avoid N+1
+        val accountIds = entry.lines.map { it.accountId }.distinct()
+        val accounts = accountRepository.findAllById(accountIds).associateBy { it.id }
+        entry.lines.forEach { line ->
+            val acct = accounts[line.accountId]
+            if (acct?.isHeader == true) {
+                throw ValidationException(
+                    "HEADER_ACCOUNT_POSTING_BLOCKED",
+                    "Account ${acct.accountCode} '${acct.accountName}' is a header/summary account and cannot " +
+                    "receive direct postings (IAS 1 §29). Post to a detail-level child account instead."
+                )
+            }
+        }
+
         entry.lines.forEach { line ->
             // FIX: use signum() — scale-independent zero check
             val hasDebit  = line.debitAmount.signum() > 0

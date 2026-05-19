@@ -92,6 +92,25 @@ class UserController(private val userService: UserService) {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // GET /api/v1/users/active-count?entityId=
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Operation(summary = "Count active users (STATUS=ACTIVE) for an entity")
+    @GetMapping("/active-count")
+    @PreAuthorize(
+        "hasRole('SYSTEM_ADMIN') or hasRole('CONTROLLER_CFO') or hasRole('AUDITOR')"
+    )
+    fun countActive(
+        @RequestParam entityId: UUID
+    ): ResponseEntity<ApiResponse<Long>> {
+        val currentUser = SecurityUtils.currentUser()
+        if (currentUser.entityId != entityId && currentUser.role != UserRole.SYSTEM_ADMIN) {
+            throw ValidationException("FORBIDDEN", "You can only access users within your own entity.", httpStatus = 403)
+        }
+        return ResponseEntity.ok(ApiResponse.success(userService.countActiveByEntity(entityId)))
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // GET /api/v1/users/{id}
     // ──────────────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { journals as journalsApi, periods as periodsApi } from '@/api/index.js'
-import { useAuth } from '@/composables/useAuth.js'
+import { useAuth }         from '@/composables/useAuth.js'
+import { useOrganization } from '@/composables/useOrganization.js'
 import { useToast } from '@/composables/useToast.js'
 import { useAccountCache } from '@/composables/useAccountCache.js'
 import { fmt, fmtDate, fmtDateTime } from '@/utils/format.js'
@@ -19,7 +20,10 @@ import AmountInput      from '@/components/primitives/AmountInput.vue'
 import SearchableSelect from '@/components/primitives/SearchableSelect.vue'
 
 const { currentUser } = useAuth()
+const { org } = useOrganization()
 const { toast } = useToast()
+
+const functionalCcy = computed(() => org.value?.functionalCurrency ?? 'KES')
 const acctCache = useAccountCache()
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -51,6 +55,7 @@ const accountByCode = computed(() => Object.fromEntries(acctCache.accounts.value
 
 // ── Periods for new JE form ───────────────────────────────────────────────────
 const openPeriods = computed(() => allPeriods.value.filter(p => p.status === 'OPEN' || p.status === 'ADJUSTING'))
+const periodById = computed(() => Object.fromEntries(allPeriods.value.map(p => [p.id, p])))
 
 // ── Data load ─────────────────────────────────────────────────────────────────
 function toArray(data) {
@@ -142,7 +147,7 @@ function exportCSV() {
         (l.description || '').replace(/,/g, ';'),
         l.debitAmount || l.functionalDebit || 0,
         l.creditAmount || l.functionalCredit || 0,
-        l.currencyCode || 'KES',
+        l.currencyCode || functionalCcy.value,
       ])
     }
   }
@@ -281,7 +286,7 @@ async function submitImport() {
       const first = grpRows[0]
       const cmd = {
         entityId: entityId.value,
-        periodId: defaultPeriod?.id || 'P-2026-02',
+        periodId: defaultPeriod?.id ?? '',
         transDate: first.date,
         description: first.description || first.batch_ref,
         lines: grpRows.map(r => {
@@ -370,8 +375,8 @@ async function doReverse(j) {
 // ── New journal entry form ────────────────────────────────────────────────────
 const newForm = ref({ periodId: '', transDate: '', description: '' })
 const newLines = ref([
-  { accountCode: '', memo: '', debit: 0, credit: 0, currency: 'KES', exchangeRate: 1 },
-  { accountCode: '', memo: '', debit: 0, credit: 0, currency: 'KES', exchangeRate: 1 },
+  { accountCode: '', memo: '', debit: 0, credit: 0, currency: '', exchangeRate: 1 },
+  { accountCode: '', memo: '', debit: 0, credit: 0, currency: '', exchangeRate: 1 },
 ])
 const newSaving = ref(false)
 const newFormErrors = ref([])
@@ -381,21 +386,22 @@ const newTotalCredit = computed(() => newLines.value.reduce((s, l) => s + Number
 const newBalanced    = computed(() => Math.abs(newTotalDebit.value - newTotalCredit.value) < 0.01)
 
 function addLine() {
-  newLines.value.push({ accountCode: '', memo: '', debit: 0, credit: 0, currency: 'KES', exchangeRate: 1 })
+  newLines.value.push({ accountCode: '', memo: '', debit: 0, credit: 0, currency: functionalCcy.value, exchangeRate: 1 })
 }
 function removeLine(i) {
   if (newLines.value.length > 2) newLines.value.splice(i, 1)
 }
 
 function openNewModal() {
+  const ccy = functionalCcy.value
   newForm.value = {
     periodId: openPeriods.value[0]?.id || '',
     transDate: new Date().toISOString().slice(0, 10),
     description: '',
   }
   newLines.value = [
-    { accountCode: '', memo: '', debit: 0, credit: 0, currency: 'KES', exchangeRate: 1 },
-    { accountCode: '', memo: '', debit: 0, credit: 0, currency: 'KES', exchangeRate: 1 },
+    { accountCode: '', memo: '', debit: 0, credit: 0, currency: ccy, exchangeRate: 1 },
+    { accountCode: '', memo: '', debit: 0, credit: 0, currency: ccy, exchangeRate: 1 },
   ]
   newFormErrors.value = []
   showNew.value = true
@@ -547,7 +553,7 @@ function periodDisplay(p) {
           </div>
           <div class="je-stat">
             <div class="je-stat-label">Period</div>
-            <div class="je-stat-value">{{ drawer.periodId ? drawer.periodId.toString().slice(0, 10) : '—' }}</div>
+            <div class="je-stat-value">{{ drawer.periodId ? (periodById[drawer.periodId]?.periodName ?? drawer.periodId.toString().slice(0, 8)) : '—' }}</div>
           </div>
           <div class="je-stat">
             <div class="je-stat-label">Source</div>
@@ -653,7 +659,7 @@ function periodDisplay(p) {
         </div>
         <div class="field">
           <label>Currency</label>
-          <input class="input mono" type="text" value="KES" disabled />
+          <input class="input mono" type="text" :value="functionalCcy" disabled />
         </div>
         <div class="field" style="grid-column:span 3">
           <label>Description <span class="req">*</span></label>
@@ -681,7 +687,8 @@ function periodDisplay(p) {
               <td>
                 <AccountCombobox
                   v-model="line.accountCode"
-                  :accounts="acctCache.accounts.value"
+                  :accounts="acctCache.postableAccounts.value"
+                  :allAccounts="acctCache.accounts.value"
                   :error="!!(line.accountCode && !accountByCode[line.accountCode.trim()])"
                   placeholder="Search by code or name…"
                 />

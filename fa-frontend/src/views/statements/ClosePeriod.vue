@@ -1,28 +1,53 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { reports } from '@/api/index.js'
-import { useToast } from '@/composables/useToast.js'
-import { fmt } from '@/utils/format.js'
-import PageHeader from '@/components/PageHeader.vue'
-import Button from '@/components/primitives/Button.vue'
-import Badge from '@/components/primitives/Badge.vue'
-import Banner from '@/components/data-display/Banner.vue'
+import { reports, periods as periodsApi } from '@/api/index.js'
+import { useAuth }    from '@/composables/useAuth.js'
+import { useAppMode } from '@/composables/useAppMode.js'
+import { useToast }   from '@/composables/useToast.js'
+import { fmt }        from '@/utils/format.js'
+import PageHeader     from '@/components/PageHeader.vue'
+import Button         from '@/components/primitives/Button.vue'
+import Badge          from '@/components/primitives/Badge.vue'
+import Banner         from '@/components/data-display/Banner.vue'
 
-const { toast } = useToast()
+const { currentUser } = useAuth()
+const { isDemo }      = useAppMode()
+const { toast }       = useToast()
 
-const preview = ref(null)
-const loading = ref(true)
-const running = ref(false)
+const entityId = computed(() => currentUser.value?.entityId ?? null)
 
-// In production, entityId/periodId come from the auth context.
-// For now, we rely on the backend to resolve from the JWT.
-onMounted(async () => {
+const activePeriod = ref(null)
+const preview      = ref(null)
+const loading      = ref(true)
+const running      = ref(false)
+
+async function loadActivePeriod() {
+  if (!entityId.value) return
   try {
-    const data = await reports.closingPreview({})
+    const data = await periodsApi.list({ entityId: entityId.value, size: 50 })
+    const items = data?.content ?? (Array.isArray(data) ? data : [])
+    activePeriod.value =
+      items.find(p => p.status === 'CLOSING') ??
+      items.find(p => p.status === 'ADJUSTING') ??
+      null
+  } catch { }
+}
+
+async function loadPreview() {
+  loading.value = true
+  try {
+    const data = isDemo.value
+      ? await reports.closingPreview({})
+      : await reports.closingPreview({ entityId: entityId.value, periodId: activePeriod.value?.id })
     if (data) preview.value = data
-  } catch { /* fallback to null */ } finally {
+  } catch { } finally {
     loading.value = false
   }
+}
+
+onMounted(async () => {
+  if (!isDemo.value) await loadActivePeriod()
+  await loadPreview()
 })
 
 const allLines = computed(() => {
@@ -36,8 +61,8 @@ const allLines = computed(() => {
   ]
 })
 
-const drTotal = computed(() => allLines.value.reduce((s, l) => s + (l.debit  ?? 0), 0))
-const crTotal = computed(() => allLines.value.reduce((s, l) => s + (l.credit ?? 0), 0))
+const drTotal  = computed(() => allLines.value.reduce((s, l) => s + (l.debit  ?? 0), 0))
+const crTotal  = computed(() => allLines.value.reduce((s, l) => s + (l.credit ?? 0), 0))
 const balanced = computed(() => Math.abs(drTotal.value - crTotal.value) < 0.01)
 
 const gates = computed(() => [
@@ -57,9 +82,13 @@ async function runClosing() {
   }
   running.value = true
   try {
-    await reports.runClosing({})
+    isDemo.value
+      ? await reports.runClosing({})
+      : await reports.runClosing({ entityId: entityId.value, periodId: activePeriod.value?.id })
     toast.success('Closing entries posted. Period is now CLOSED.')
-  } catch { /* handled */ } finally {
+    if (!isDemo.value) await loadActivePeriod()
+    await loadPreview()
+  } catch { } finally {
     running.value = false
   }
 }
@@ -68,7 +97,7 @@ async function runClosing() {
 <template>
   <div class="page">
     <PageHeader
-      :title="`Close Period · ${preview?.periodCode ?? '…'}`"
+      :title="`Close Period · ${activePeriod?.periodName ?? preview?.periodCode ?? '…'}`"
       meta="Phase: CLOSING (after adjusting)"
     >
       <Button variant="primary" icon="lock" :loading="running" :disabled="!allGatesPass" @click="runClosing">

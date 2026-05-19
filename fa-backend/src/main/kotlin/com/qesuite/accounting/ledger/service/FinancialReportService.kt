@@ -90,7 +90,7 @@ class FinancialReportService(
             ),
             totalAssets      = totalAssets,
             totalLiabilities = totalLiabilities,
-            totalEquity      = totalEquity,
+            totalEquity      = adjustedEquity,
             netIncome        = pnl.netIncome
         )
     }

@@ -51,7 +51,7 @@ class AccountService(
 
         val subtype = command.accountSubtype
         val type = subtype.parentType
-        val normalBalance = type.normalBalance
+        val normalBalance = subtype.normalBalanceOverride ?: type.normalBalance
         validateHierarchy(command.entityId, command.parentAccountId)
 
         val account = Account(
@@ -67,7 +67,19 @@ class AccountService(
             ifrsClassification = command.ifrsClassification,
             currencyCode = resolvedCurrency
         )
-        return accountRepository.save(account)
+        val saved = accountRepository.save(account)
+
+        // Promote the parent to header status so it can no longer receive direct postings
+        if (command.parentAccountId != null) {
+            accountRepository.findById(command.parentAccountId).ifPresent { parent ->
+                if (!parent.isHeader) {
+                    parent.isHeader = true
+                    accountRepository.save(parent)
+                }
+            }
+        }
+
+        return saved
     }
 
     @Transactional(readOnly = true)
@@ -108,7 +120,7 @@ class AccountService(
         account.accountName = command.accountName
         account.accountSubtype = command.accountSubtype
         account.accountType = command.accountSubtype.parentType
-        account.normalBalance = account.accountType.normalBalance
+        account.normalBalance = command.accountSubtype.normalBalanceOverride ?: account.accountType.normalBalance
         account.ifrsCategory = command.ifrsCategory
         account.ifrsClassification = command.ifrsClassification
         return accountRepository.save(account)
@@ -156,7 +168,7 @@ class AccountService(
                 createAccount(CreateAccountCommand(entityId, "1200", "Accounts Receivable", AccountSubtype.CURRENT_RECEIVABLE, ifrsCategory = IfrsCategory.CURRENT_ASSETS))
                 createAccount(CreateAccountCommand(entityId, "1500", "Prepaid Expenses", AccountSubtype.CURRENT_PREPAID, ifrsCategory = IfrsCategory.CURRENT_ASSETS))
                 createAccount(CreateAccountCommand(entityId, "1600", "Property Plant & Equipment", AccountSubtype.NON_CURRENT_PPE, ifrsCategory = IfrsCategory.NON_CURRENT_ASSETS))
-                createAccount(CreateAccountCommand(entityId, "1620", "Accumulated Depreciation", AccountSubtype.NON_CURRENT_PPE, ifrsCategory = IfrsCategory.NON_CURRENT_ASSETS))
+                createAccount(CreateAccountCommand(entityId, "1620", "Accumulated Depreciation", AccountSubtype.ACCUMULATED_DEPRECIATION, ifrsCategory = IfrsCategory.NON_CURRENT_ASSETS))
                 createAccount(CreateAccountCommand(entityId, "2000", "Accounts Payable", AccountSubtype.CURRENT_PAYABLE, ifrsCategory = IfrsCategory.CURRENT_LIABILITIES))
                 createAccount(CreateAccountCommand(entityId, "2100", "Accrued Liabilities", AccountSubtype.CURRENT_ACCRUED, ifrsCategory = IfrsCategory.CURRENT_LIABILITIES))
                 createAccount(CreateAccountCommand(entityId, "2200", "Deferred Revenue", AccountSubtype.CURRENT_DEFERRED_REVENUE, ifrsCategory = IfrsCategory.CURRENT_LIABILITIES))
@@ -176,7 +188,7 @@ class AccountService(
                 createAccount(CreateAccountCommand(entityId, "1300", "Inventory", AccountSubtype.CURRENT_INVENTORY, ifrsCategory = IfrsCategory.CURRENT_ASSETS))
                 createAccount(CreateAccountCommand(entityId, "1500", "Prepaid Expenses", AccountSubtype.CURRENT_PREPAID, ifrsCategory = IfrsCategory.CURRENT_ASSETS))
                 createAccount(CreateAccountCommand(entityId, "1600", "Property Plant & Equipment", AccountSubtype.NON_CURRENT_PPE, ifrsCategory = IfrsCategory.NON_CURRENT_ASSETS))
-                createAccount(CreateAccountCommand(entityId, "1620", "Accumulated Depreciation", AccountSubtype.NON_CURRENT_PPE, ifrsCategory = IfrsCategory.NON_CURRENT_ASSETS))
+                createAccount(CreateAccountCommand(entityId, "1620", "Accumulated Depreciation", AccountSubtype.ACCUMULATED_DEPRECIATION, ifrsCategory = IfrsCategory.NON_CURRENT_ASSETS))
                 createAccount(CreateAccountCommand(entityId, "2000", "Accounts Payable", AccountSubtype.CURRENT_PAYABLE, ifrsCategory = IfrsCategory.CURRENT_LIABILITIES))
                 createAccount(CreateAccountCommand(entityId, "2100", "Accrued Liabilities", AccountSubtype.CURRENT_ACCRUED, ifrsCategory = IfrsCategory.CURRENT_LIABILITIES))
                 createAccount(CreateAccountCommand(entityId, "3000", "Share Capital", AccountSubtype.SHARE_CAPITAL, ifrsCategory = IfrsCategory.EQUITY))
@@ -197,7 +209,7 @@ class AccountService(
                 createAccount(CreateAccountCommand(entityId, "1330", "Finished Goods Inventory", AccountSubtype.CURRENT_INVENTORY, ifrsCategory = IfrsCategory.CURRENT_ASSETS))
                 createAccount(CreateAccountCommand(entityId, "1500", "Prepaid Expenses", AccountSubtype.CURRENT_PREPAID, ifrsCategory = IfrsCategory.CURRENT_ASSETS))
                 createAccount(CreateAccountCommand(entityId, "1600", "Plant & Machinery", AccountSubtype.NON_CURRENT_PPE, ifrsCategory = IfrsCategory.NON_CURRENT_ASSETS))
-                createAccount(CreateAccountCommand(entityId, "1620", "Accumulated Depreciation — Plant", AccountSubtype.NON_CURRENT_PPE, ifrsCategory = IfrsCategory.NON_CURRENT_ASSETS))
+                createAccount(CreateAccountCommand(entityId, "1620", "Accumulated Depreciation — Plant", AccountSubtype.ACCUMULATED_DEPRECIATION, ifrsCategory = IfrsCategory.NON_CURRENT_ASSETS))
                 createAccount(CreateAccountCommand(entityId, "2000", "Accounts Payable", AccountSubtype.CURRENT_PAYABLE, ifrsCategory = IfrsCategory.CURRENT_LIABILITIES))
                 createAccount(CreateAccountCommand(entityId, "2100", "Accrued Wages Payable", AccountSubtype.CURRENT_ACCRUED, ifrsCategory = IfrsCategory.CURRENT_LIABILITIES))
                 createAccount(CreateAccountCommand(entityId, "3000", "Share Capital", AccountSubtype.SHARE_CAPITAL, ifrsCategory = IfrsCategory.EQUITY))
@@ -255,17 +267,31 @@ class AccountService(
     fun rebuildHierarchy(entityId: UUID) = inferAndSaveHierarchy(entityId)
 
     private fun inferAndSaveHierarchy(entityId: UUID) {
-        val accounts = accountRepository.findAllByEntityId(entityId)
-        val codeToId = accounts.associate { it.accountCode to it.id }
-        val codeSet  = codeToId.keys.toSet()
-        val dirty    = mutableListOf<Account>()
+        val accounts    = accountRepository.findAllByEntityId(entityId)
+        val codeToId    = accounts.associate { it.accountCode to it.id }
+        val idToAccount = accounts.associateBy { it.id }
+        val codeSet     = codeToId.keys.toSet()
+        val dirty       = mutableListOf<Account>()
+        val newParentIds = mutableSetOf<UUID>()
+
         for (acct in accounts) {
             if (acct.parentAccountId != null) continue
             val parentCode = inferParentCode(acct.accountCode, codeSet) ?: continue
-            val parentId   = codeToId[parentCode]   ?: continue
+            val parentId   = codeToId[parentCode] ?: continue
             acct.parentAccountId = parentId
+            newParentIds.add(parentId)
             dirty.add(acct)
         }
+
+        // Mark newly discovered parents as header accounts
+        for (parentId in newParentIds) {
+            val parent = idToAccount[parentId]
+            if (parent != null && !parent.isHeader) {
+                parent.isHeader = true
+                dirty.add(parent)
+            }
+        }
+
         if (dirty.isNotEmpty()) accountRepository.saveAll(dirty)
     }
 

@@ -15,6 +15,25 @@ import java.math.RoundingMode
 import java.time.LocalDate
 import java.util.*
 
+data class RevaluationPreviewItem(
+    val accountCode: String,
+    val accountName: String,
+    val currencyCode: String,
+    val balanceFc: BigDecimal,
+    val priorRate: BigDecimal,
+    val closingRate: BigDecimal,
+    val priorLc: BigDecimal,
+    val newLc: BigDecimal,
+    val delta: BigDecimal
+)
+
+data class RevaluationPreviewResponse(
+    val items: List<RevaluationPreviewItem>,
+    val netDelta: BigDecimal,
+    val asOfDate: String,
+    val functionalCurrency: String
+)
+
 @Service
 class FXRevaluationService(
     private val accountRepository: AccountRepository,
@@ -22,6 +41,66 @@ class FXRevaluationService(
     private val journalService: JournalService,
     private val currencyRepository: CurrencyRepository
 ) {
+
+    @Transactional(readOnly = true)
+    fun previewRevaluation(entityId: UUID, date: LocalDate): RevaluationPreviewResponse {
+        val functionalCurrency = currencyRepository.findByEntityIdAndIsFunctionalTrue(entityId)
+            .orElseThrow { ValidationException("FUNCTIONAL_CURRENCY_NOT_SET", "Functional currency not set for entity.") }
+
+        val accounts = accountRepository.findAllByEntityId(entityId)
+            .filter { it.accountSubtype.isMonetary && it.currencyCode != functionalCurrency.currencyCode }
+
+        val items = accounts.mapNotNull { account ->
+            val closingRate = try {
+                exchangeRateService.getRate(entityId, account.currencyCode, functionalCurrency.currencyCode, date, RateType.CLOSING)
+            } catch (e: Exception) {
+                try {
+                    exchangeRateService.getRate(entityId, account.currencyCode, functionalCurrency.currencyCode, date, RateType.SPOT)
+                } catch (e2: Exception) {
+                    return@mapNotNull null
+                }
+            }
+
+            val balanceFc = account.originalCurrencyBalance
+            val priorLc   = account.currentBalance
+            val newLc     = balanceFc.multiply(closingRate).setScale(6, RoundingMode.HALF_EVEN)
+
+            val priorRate = if (balanceFc.abs() > BigDecimal.ZERO)
+                priorLc.divide(balanceFc, 6, RoundingMode.HALF_EVEN)
+            else
+                closingRate
+
+            // P&L impact: for liabilities/equity (credit-normal), a decrease in balance = gain
+            val delta = if (account.normalBalance == NormalBalance.DEBIT)
+                newLc.subtract(priorLc).setScale(6, RoundingMode.HALF_EVEN)
+            else
+                priorLc.subtract(newLc).setScale(6, RoundingMode.HALF_EVEN)
+
+            if (delta.abs() <= BigDecimal("0.000001")) return@mapNotNull null
+
+            RevaluationPreviewItem(
+                accountCode  = account.accountCode,
+                accountName  = account.accountName,
+                currencyCode = account.currencyCode,
+                balanceFc    = balanceFc,
+                priorRate    = priorRate,
+                closingRate  = closingRate,
+                priorLc      = priorLc,
+                newLc        = newLc,
+                delta        = delta
+            )
+        }
+
+        val netDelta = items.fold(BigDecimal.ZERO) { sum, item -> sum.add(item.delta) }
+            .setScale(6, RoundingMode.HALF_EVEN)
+
+        return RevaluationPreviewResponse(
+            items             = items,
+            netDelta          = netDelta,
+            asOfDate          = date.toString(),
+            functionalCurrency = functionalCurrency.currencyCode
+        )
+    }
 
     @Transactional
     fun runRevaluation(entityId: UUID, periodId: UUID, date: LocalDate, gainLossAccountId: UUID) {

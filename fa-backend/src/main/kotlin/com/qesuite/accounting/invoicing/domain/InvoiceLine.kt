@@ -1,5 +1,6 @@
 package com.qesuite.accounting.invoicing.domain
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -27,6 +28,7 @@ data class InvoiceLine(
     @Schema(example = "550e8400-e29b-41d4-a716-446655440010")
     val id: UUID = UUID.randomUUID(),
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "invoice_id", nullable = false)
     var invoice: Invoice? = null,

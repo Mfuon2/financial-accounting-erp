@@ -12,6 +12,7 @@ import com.qesuite.accounting.invoicing.repository.InvoiceRepository
 import com.qesuite.accounting.journal.service.CreateJournalEntryCommand
 import com.qesuite.accounting.journal.service.CreateJournalLineCommand
 import com.qesuite.accounting.journal.service.JournalService
+import com.qesuite.accounting.coa.domain.AccountSubtype
 import com.qesuite.accounting.coa.repository.AccountRepository
 import com.qesuite.accounting.party.repository.CustomerRepository
 import com.qesuite.accounting.shared.audit.annotation.AuditEntityId
@@ -57,7 +58,8 @@ class InvoiceService(
     private val journalService: JournalService,
     private val taxService: TaxService,
     private val ifrs15Service: Ifrs15RecognitionService,
-    private val invoiceNumberGenerator: InvoiceNumberGenerator,
+    private val codeGeneratorService: com.qesuite.accounting.shared.codegen.service.CodeGeneratorService,
+    private val entityNumberConfigService: com.qesuite.accounting.shared.codegen.service.EntityNumberConfigService,
 ) {
 
     private companion object {
@@ -84,15 +86,12 @@ class InvoiceService(
             )
         }
 
-        // §14.1 — Allocate a unique invoice number; retry on the (extremely unlikely) race.
-        val invoiceNumber = invoiceNumberGenerator.next(command.entityId, prefix = "INV")
-        if (invoiceRepository.existsByEntityIdAndInvoiceNumber(command.entityId, invoiceNumber)) {
-            throw ConflictException(
-                errorCode = "DUPLICATE_INVOICE_NUMBER",
-                message = "Invoice number $invoiceNumber already exists for this entity.",
-                context = mapOf("invoice_number" to invoiceNumber),
-            )
-        }
+        // §14.1 — Allocate a unique invoice number using the entity's configured format.
+        val invConfig = entityNumberConfigService.resolveConfig(command.entityId, "SALES_INVOICE")
+        val invoiceNumber = codeGeneratorService.nextUnique(
+            command.entityId, invConfig.prefix, invConfig.yearScoped,
+            customFormat = invConfig.customFormat,
+        ) { !invoiceRepository.existsByEntityIdAndInvoiceNumber(command.entityId, it) }
 
         // §14.1 — Aggregate line subtotals + tax.
         // Line-level discountPercent reduces lineSubtotal before tax is applied and before
@@ -181,10 +180,13 @@ class InvoiceService(
         val customer = customerRepository.findById(invoice.customerId)
             .orElseThrow { ResourceNotFoundException("CUSTOMER_NOT_FOUND", invoice.customerId, "Customer") }
         val arAccount = customer.defaultArAccountId
+            ?: accountRepository.findAllByEntityIdAndAccountSubtype(invoice.entityId, AccountSubtype.CURRENT_RECEIVABLE)
+                .filter { !it.isHeader }
+                .minByOrNull { it.accountCode }?.id
             ?: throw BusinessRuleViolationException(
-                errorCode = "CUSTOMER_AR_ACCOUNT_MISSING",
-                message = "Customer ${customer.customerCode} has no defaultArAccountId configured.",
-                context = mapOf("customer_id" to customer.id),
+                errorCode = "AR_ACCOUNT_NOT_FOUND",
+                message = "No Accounts Receivable account found. Add a CURRENT_RECEIVABLE account to your chart of accounts.",
+                context = mapOf("entity_id" to invoice.entityId),
             )
 
         val currentExposure = invoiceRepository.sumOutstandingByCustomer(invoice.entityId, invoice.customerId)
@@ -313,7 +315,7 @@ class InvoiceService(
      * (Payments) once the payment journal has posted. Returns the new status.
      */
     @Auditable(action = AuditAction.UPDATE, resourceType = "INVOICE")
-    fun applyPayment(@AuditResourceId invoiceId: UUID, paymentAmount: BigDecimal): InvoiceStatus {
+    fun applyPayment(@AuditResourceId invoiceId: UUID, paymentAmount: BigDecimal): Invoice {
         val invoice = findById(invoiceId)
         val payment = paymentAmount.setScale(MONEY_SCALE, ROUND)
 
@@ -344,8 +346,7 @@ class InvoiceService(
             invoice.paidAmount.signum() > 0 -> InvoiceStatus.PARTIALLY_PAID
             else -> invoice.status
         }
-        invoiceRepository.save(invoice)
-        return invoice.status
+        return invoiceRepository.save(invoice)
     }
 
     /**
@@ -412,10 +413,13 @@ class InvoiceService(
         val customer = customerRepository.findById(original.customerId)
             .orElseThrow { ResourceNotFoundException("CUSTOMER_NOT_FOUND", original.customerId, "Customer") }
         val arAccount = customer.defaultArAccountId
+            ?: accountRepository.findAllByEntityIdAndAccountSubtype(original.entityId, AccountSubtype.CURRENT_RECEIVABLE)
+                .filter { !it.isHeader }
+                .minByOrNull { it.accountCode }?.id
             ?: throw BusinessRuleViolationException(
-                errorCode = "CUSTOMER_AR_ACCOUNT_MISSING",
-                message = "Customer ${customer.customerCode} has no defaultArAccountId configured.",
-                context = mapOf("customer_id" to customer.id),
+                errorCode = "AR_ACCOUNT_NOT_FOUND",
+                message = "No Accounts Receivable account found. Add a CURRENT_RECEIVABLE account to your chart of accounts.",
+                context = mapOf("entity_id" to original.entityId),
             )
 
         // C3 — resolve periodId before constructing Invoice (constructor requires non-nullable UUID).
@@ -426,7 +430,11 @@ class InvoiceService(
                 context   = mapOf("invoice_id" to originalInvoiceId),
             )
 
-        val cnNumber = invoiceNumberGenerator.next(original.entityId, prefix = "CN")
+        val cnConfig = entityNumberConfigService.resolveConfig(original.entityId, "CREDIT_NOTE")
+        val cnNumber = codeGeneratorService.nextUnique(
+            original.entityId, cnConfig.prefix, cnConfig.yearScoped,
+            customFormat = cnConfig.customFormat,
+        ) { !invoiceRepository.existsByEntityIdAndInvoiceNumber(original.entityId, it) }
         val creditNote = Invoice(
             entityId = original.entityId,
             periodId = creditNotePeriodId,
@@ -518,7 +526,20 @@ class InvoiceService(
         )
         journalService.postEntryAsSystem(je.id)
         saved.journalEntryId = je.id
-        return invoiceRepository.save(saved)
+        invoiceRepository.save(saved)
+
+        // Credit note settles part (or all) of the original invoice — treat as a payment
+        // so the DB constraint outstanding = total - paid stays satisfied.
+        original.paidAmount        = original.paidAmount.add(creditAmount).setScale(MONEY_SCALE, ROUND)
+        original.outstandingAmount = original.totalAmount.subtract(original.paidAmount).setScale(MONEY_SCALE, ROUND)
+        original.status = when {
+            original.outstandingAmount.signum() <= 0 -> InvoiceStatus.PAID
+            original.paidAmount.signum() > 0         -> InvoiceStatus.PARTIALLY_PAID
+            else                                     -> original.status
+        }
+        invoiceRepository.save(original)
+
+        return saved
     }
 
     @Transactional(readOnly = true)
@@ -592,29 +613,3 @@ class InvoiceService(
     }
 }
 
-/**
- * §14.1 — Invoice number generator.
- *
- * Generates a deterministic, human-readable, sequential invoice number of the form:
- *
- *   {PREFIX}-{YYYY}-{ENTITY_CODE_4}-{SEQ_PADDED_6}
- *
- * Example: INV-2026-A1B2-000042
- *
- * The sequence is derived from `countByEntityId` so numbers are monotonically increasing
- * per entity. The service layer still enforces the DB UNIQUE constraint and raises
- * `DUPLICATE_INVOICE_NUMBER` on the (practically impossible) concurrent collision.
- *
- * The `prefix` parameter distinguishes invoices ("INV") from credit notes ("CN").
- */
-@org.springframework.stereotype.Component
-class InvoiceNumberGenerator(private val invoiceRepository: InvoiceRepository) {
-    fun next(entityId: UUID, prefix: String = "INV"): String {
-        val year      = java.time.Year.now().value
-        val entityCode = entityId.toString().replace("-", "").take(4).uppercase()
-        val seq       = invoiceRepository.countByEntityId(entityId) + 1L
-        // UUID suffix prevents collisions under concurrent creation at the same seq count
-        val collision = java.util.UUID.randomUUID().toString().replace("-","").take(4).uppercase()
-        return "$prefix-$year-$entityCode-${seq.toString().padStart(6, '0')}-$collision"
-    }
-}

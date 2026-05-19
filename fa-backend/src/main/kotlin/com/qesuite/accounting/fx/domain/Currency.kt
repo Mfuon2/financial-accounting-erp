@@ -18,6 +18,12 @@ class Currency(
     var currencyName: String,
 
     @Column(name = "is_functional", nullable = false)
-    var isFunctional: Boolean = false
+    var isFunctional: Boolean = false,
+
+    @Column(name = "symbol", length = 10, nullable = true)
+    var symbol: String? = null,
+
+    @Column(name = "decimals", nullable = false)
+    var decimals: Int = 2
 
 ) : BaseFinancialEntity(entityId = entityId)

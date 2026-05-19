@@ -136,8 +136,8 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun submit(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
-        sourceDocumentService.transitionStatus(id, SourceDocumentStatus.SUBMITTED)
-        return ApiResponse.success(sourceDocumentService.findById(id))
+        val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.SUBMITTED)
+        return ApiResponse.success(updated)
     }
 
     @PostMapping("/{id}/review")
@@ -149,8 +149,8 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun review(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
-        sourceDocumentService.transitionStatus(id, SourceDocumentStatus.REVIEWED)
-        return ApiResponse.success(sourceDocumentService.findById(id))
+        val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.REVIEWED)
+        return ApiResponse.success(updated)
     }
 
     @PostMapping("/{id}/approve")
@@ -162,8 +162,8 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun approve(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
-        sourceDocumentService.transitionStatus(id, SourceDocumentStatus.APPROVED)
-        return ApiResponse.success(sourceDocumentService.findById(id))
+        val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.APPROVED)
+        return ApiResponse.success(updated)
     }
 
     @PostMapping("/{id}/archive")
@@ -175,8 +175,8 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun archive(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
-        sourceDocumentService.transitionStatus(id, SourceDocumentStatus.ARCHIVED)
-        return ApiResponse.success(sourceDocumentService.findById(id))
+        val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.ARCHIVED)
+        return ApiResponse.success(updated)
     }
 
     @PostMapping("/{id}/void")
@@ -191,8 +191,8 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun void(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
-        sourceDocumentService.transitionStatus(id, SourceDocumentStatus.VOID)
-        return ApiResponse.success(sourceDocumentService.findById(id))
+        val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.VOID)
+        return ApiResponse.success(updated)
     }
 
     @PostMapping("/{id}/restore")
@@ -207,8 +207,8 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun restore(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
-        sourceDocumentService.transitionStatus(id, SourceDocumentStatus.DRAFT)
-        return ApiResponse.success(sourceDocumentService.findById(id))
+        val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.DRAFT)
+        return ApiResponse.success(updated)
     }
 
     // ─────────────────────────────────────────────────────────────────────────

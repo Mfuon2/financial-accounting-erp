@@ -63,13 +63,21 @@ class AssetController(
     )
     fun listAssets(
         @RequestParam entityId: UUID,
-        @RequestParam(required = false) status: AssetStatus?,
+        @RequestParam(required = false) statusFilter: String?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
         @RequestParam(defaultValue = "acquisitionDate") sort: String,
-        @RequestParam(defaultValue = "ASC") direction: Sort.Direction
+        @RequestParam(defaultValue = "ASC") direction: String
     ): ApiResponse<PagedResponse<FixedAsset>> {
-        val pageable = PageRequest.of(page, size, Sort.by(direction, sort))
+        val sortDirection = try {
+            Sort.Direction.fromString(direction)
+        } catch (e: IllegalArgumentException) {
+            Sort.Direction.ASC
+        }
+        val status: AssetStatus? = statusFilter?.let {
+            try { AssetStatus.valueOf(it.uppercase()) } catch (e: IllegalArgumentException) { null }
+        }
+        val pageable = PageRequest.of(page, size, Sort.by(sortDirection, sort))
         val resultPage = if (status != null) {
             assetMasterService.findByEntityAndStatus(entityId, status, pageable)
         } else {

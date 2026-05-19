@@ -16,4 +16,6 @@ interface ExchangeRateRepository : JpaRepository<ExchangeRate, UUID> {
         rateDate: LocalDate,
         rateType: RateType
     ): Optional<ExchangeRate>
+
+    fun findAllByEntityIdOrderByRateDateDescFromCurrencyAsc(entityId: UUID): List<ExchangeRate>
 }

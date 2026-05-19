@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
@@ -10,13 +10,18 @@ import ToastStack from '@/components/overlays/ToastStack.vue'
 import TweaksPanel from '@/components/TweaksPanel.vue'
 import { useTweaks } from '@/composables/useTweaks.js'
 import { useAppMode } from '@/composables/useAppMode.js'
-import { PERIODS } from '@/data/index.js'
+import { useActivePeriod } from '@/composables/useActivePeriod.js'
+import { useOrganization } from '@/composables/useOrganization.js'
+import { useSetupChecks } from '@/composables/useSetupChecks.js'
 
 const router = useRouter()
 const route  = useRoute()
 const { logout, currentUser } = useAuth()
 const { tweaks, setTweak } = useTweaks()
 const { mode } = useAppMode()
+const { runChecks } = useSetupChecks()
+const { activePeriod, load: loadPeriod } = useActivePeriod()
+const { load: loadOrg } = useOrganization()
 
 const paletteOpen = ref(false)
 
@@ -48,6 +53,7 @@ const CRUMBS = {
   '/audit':         ['Reports', 'Audit Trail'],
   '/ias1':          ['Reports', 'IAS 1 Compliance'],
   '/comparative':   ['Reports', 'Comparative TB'],
+  '/profile':       ['Setup', 'My Profile'],
   '/organization':  ['Setup', 'Organization'],
   '/users':         ['Setup', 'Users'],
   '/api-keys':      ['Setup', 'API Keys'],
@@ -93,12 +99,20 @@ const PALETTE_ITEMS = [
   { icon: 'card',       label: 'Record a payment',      route: '/payments',     group: 'Quick actions', meta: 'P' },
   { icon: 'play',       label: 'Run depreciation batch',route: '/depreciation', group: 'Quick actions' },
   { icon: 'fx',         label: 'Run FX revaluation',    route: '/fx',           group: 'Quick actions' },
-  { icon: 'lock',       label: 'Close period 2026-02',  route: '/close',        group: 'Quick actions' },
+  { icon: 'lock',       label: 'Close period',          route: '/close',        group: 'Quick actions' },
 ]
 
 const currentPath = computed(() => route.path)
 const crumbs = computed(() => CRUMBS[currentPath.value] || ['Dashboard'])
-const currentPeriod = computed(() => PERIODS.find(p => p.status === 'ADJUSTING') || PERIODS.find(p => p.status === 'OPEN') || PERIODS[0])
+const currentPeriod = activePeriod
+const entityId = computed(() => currentUser.value?.entityId ?? null)
+watch(entityId, (id) => {
+  if (id) {
+    runChecks(id)
+    loadPeriod()
+    loadOrg()
+  }
+}, { immediate: true })
 
 function navigate(path) {
   router.push(path)

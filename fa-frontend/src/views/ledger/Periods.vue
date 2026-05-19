@@ -17,7 +17,7 @@ const allPeriods   = ref([])
 const loading      = ref(false)
 const transitioning = ref(null) // period id being transitioned
 const showGenFY    = ref(false)
-const genFYYear    = ref(new Date().getFullYear() + 1)
+const genFYYear    = ref(new Date().getFullYear() - 1)
 const genFYLoading = ref(false)
 
 const entityId = computed(() => currentUser.value?.entityId ?? 'current')

@@ -28,7 +28,7 @@ function _flushQueue(err) {
 }
 
 // ── Core fetch wrapper ────────────────────────────────────────────────────────
-export async function apiFetch(path, options = {}, _retry = false) {
+export async function apiFetch(path, options = {}, _retry = false, _silent = false) {
   const { start, stop } = useLoading()
   const { toast }       = useToast()
   const { getAccessToken, silentRefresh, _clear } = useAuth()
@@ -83,7 +83,7 @@ export async function apiFetch(path, options = {}, _retry = false) {
         const body = await res.json()
         detail = body?.errors?.[0]?.message ?? body?.message ?? detail
       } catch {}
-      toast.error(`Request failed: ${detail}`)
+      if (!_silent) toast.error(`Request failed: ${detail}`)
       throw new Error(`API ${res.status}: ${path}`)
     }
 
@@ -109,6 +109,11 @@ export const post  = (path, body)  => apiFetch(path, { method: 'POST',   body: J
 export const put   = (path, body)  => apiFetch(path, { method: 'PUT',    body: JSON.stringify(body) })
 export const patch = (path, body)  => apiFetch(path, { method: 'PATCH',  body: JSON.stringify(body) })
 export const del   = (path)        => apiFetch(path, { method: 'DELETE' })
+
+/** Like get() but returns null on error instead of toasting — use when 404 is expected. */
+export async function silentGet(path) {
+  try { return await apiFetch(path, {}, false, true) } catch { return null }
+}
 
 // ── Multipart file upload ─────────────────────────────────────────────────────
 export async function uploadFile(path, formData) {

@@ -1,5 +1,6 @@
 package com.qesuite.accounting.journal.service
 
+import com.qesuite.accounting.ap.domain.Period
 import com.qesuite.accounting.ap.domain.PeriodStatus
 import com.qesuite.accounting.ap.repository.PeriodRepository
 import com.qesuite.accounting.ap.service.PeriodService
@@ -8,6 +9,7 @@ import com.qesuite.accounting.coa.domain.AccountType
 import com.qesuite.accounting.coa.repository.AccountRepository
 import com.qesuite.accounting.fx.repository.CurrencyRepository
 import com.qesuite.accounting.ledger.repository.LedgerEntryRepository
+import com.qesuite.accounting.shared.audit.annotation.AuditEntityId
 import com.qesuite.accounting.shared.audit.annotation.AuditResourceId
 import com.qesuite.accounting.shared.audit.annotation.Auditable
 import com.qesuite.accounting.shared.audit.domain.AuditAction
@@ -56,7 +58,7 @@ class ClosingService(
     @Transactional
     @Auditable(action = AuditAction.CLOSE, resourceType = "ACCOUNTING_PERIOD")
     fun runClosing(
-        entityId: UUID,
+        @AuditEntityId entityId: UUID,
         @AuditResourceId periodId: UUID,
         closingDate: LocalDate = LocalDate.now(),
         retainedEarningsAccountId: UUID? = null,
@@ -266,8 +268,8 @@ class ClosingService(
      */
     @Transactional
     @Auditable(action = AuditAction.REOPEN, resourceType = "ACCOUNTING_PERIOD")
-    fun reopenPeriod(@AuditResourceId periodId: UUID, reason: String) {
-        periodService.transitionPeriod(periodId, PeriodStatus.REOPENED)
+    fun reopenPeriod(@AuditResourceId periodId: UUID, reason: String): Period {
+        return periodService.transitionPeriod(periodId, PeriodStatus.REOPENED)
     }
 }
 

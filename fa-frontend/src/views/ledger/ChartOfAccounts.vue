@@ -238,6 +238,8 @@ const visible = computed(() => {
       if (!a.accountCode.toLowerCase().includes(q) && !a.accountName.toLowerCase().includes(q)) return false
     }
     if (viewMode.value === 'list') return true
+    // When a search is active, show all matching accounts regardless of collapse state
+    if (search.value) return true
     let pid = ipm[a.id]
     while (pid) {
       if (collapsed.value.has(pid)) return false
@@ -858,6 +860,7 @@ watch(() => form.value.accountSubtype, (st) => {
                     <Ico name="chev-right" :size="10" :style="{ transform: collapsed.has(a.id) ? '' : 'rotate(90deg)', transition: 'transform .15s' }" />
                   </button>
                   <span>{{ a.accountName }}</span>
+                  <span v-if="a.isHeader" class="header-badge" title="Header/summary account — posting blocked (IAS 1 §29)">Header</span>
                 </div>
               </td>
               <td><Badge :status="typeColor(a.accountType)" :dot="false">{{ a.accountType }}</Badge></td>
@@ -1145,6 +1148,12 @@ watch(() => form.value.accountSubtype, (st) => {
   color: var(--muted); display: flex; align-items: center; flex-shrink: 0;
 }
 .collapse-btn:hover { color: var(--text); }
+.header-badge {
+  font-size: 10px; font-weight: 600; letter-spacing: .4px; padding: 1px 6px;
+  border-radius: 4px; background: oklch(0.93 0.05 270); color: oklch(0.42 0.18 270);
+  border: 1px solid oklch(0.80 0.10 270); flex-shrink: 0; white-space: nowrap;
+  cursor: default;
+}
 
 .req { color: oklch(0.55 0.18 15); }
 

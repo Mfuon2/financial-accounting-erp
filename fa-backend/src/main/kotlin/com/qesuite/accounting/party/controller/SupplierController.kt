@@ -2,6 +2,7 @@ package com.qesuite.accounting.party.controller
 
 import com.qesuite.accounting.party.domain.Supplier
 import com.qesuite.accounting.party.dto.CreateSupplierCommand
+import com.qesuite.accounting.party.dto.SupplierStatementResponse
 import com.qesuite.accounting.party.dto.UpdateSupplierCommand
 import com.qesuite.accounting.party.service.SupplierService
 import com.qesuite.accounting.shared.dto.PagedResponse
@@ -92,6 +93,16 @@ class SupplierController(
         @Valid @RequestBody command: DeactivateSupplierCommand
     ): ApiResponse<Supplier> =
         ApiResponse.success(supplierService.deactivate(id, command.reason, command.deactivatedBy))
+
+    @GetMapping("/{id}/statement")
+    @Operation(
+        summary = "Supplier statement",
+        description = "Returns all bills and payments for a supplier with running balance, sorted by date ascending."
+    )
+    fun getStatement(
+        @PathVariable @Parameter(description = "Supplier UUID") id: UUID
+    ): ApiResponse<SupplierStatementResponse> =
+        ApiResponse.success(supplierService.getStatement(id))
 }
 
 data class DeactivateSupplierCommand(

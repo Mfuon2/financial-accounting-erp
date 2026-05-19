@@ -2,8 +2,12 @@ package com.qesuite.accounting.party.service
 
 import com.qesuite.accounting.party.domain.Supplier
 import com.qesuite.accounting.party.dto.CreateSupplierCommand
+import com.qesuite.accounting.party.dto.SupplierStatementLine
+import com.qesuite.accounting.party.dto.SupplierStatementResponse
 import com.qesuite.accounting.party.dto.UpdateSupplierCommand
 import com.qesuite.accounting.party.repository.SupplierRepository
+import com.qesuite.accounting.payables.repository.BillPaymentRepository
+import com.qesuite.accounting.payables.repository.BillRepository
 import com.qesuite.accounting.shared.audit.annotation.AuditResourceId
 import com.qesuite.accounting.shared.audit.annotation.Auditable
 import com.qesuite.accounting.shared.audit.domain.AuditAction
@@ -15,6 +19,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
@@ -28,6 +33,8 @@ class SupplierService(
     private val supplierRepository: SupplierRepository,
     private val codeGeneratorService: CodeGeneratorService,
     private val numberConfigService: EntityNumberConfigService,
+    private val billRepository: BillRepository,
+    private val billPaymentRepository: BillPaymentRepository,
 ) {
 
     @Auditable(action = AuditAction.CREATE, resourceType = "SUPPLIER")
@@ -111,4 +118,88 @@ class SupplierService(
     @Transactional(readOnly = true)
     fun findByEntityAndCode(entityId: UUID, supplierCode: String): Supplier? =
         supplierRepository.findByEntityIdAndSupplierCode(entityId, supplierCode)
+
+    @Transactional(readOnly = true)
+    fun getStatement(supplierId: UUID): SupplierStatementResponse {
+        val supplier = findById(supplierId)
+        val bills = billRepository.findBySupplierIdAndIsActiveTrueOrderByBillDateAsc(supplierId)
+
+        val billIds = bills.map { it.id }
+        val paymentsByBill = if (billIds.isEmpty()) emptyMap()
+        else billPaymentRepository.findByBillIdIn(billIds).groupBy { it.billId }
+
+        val lines = mutableListOf<SupplierStatementLine>()
+        var running = BigDecimal.ZERO
+
+        // Bills and debit notes both live in the Bill table; isDebitNote distinguishes them
+        for (bill in bills) {
+            if (bill.isDebitNote) {
+                running = running.subtract(bill.totalAmount)
+                lines += SupplierStatementLine(
+                    date        = bill.billDate,
+                    type        = "DEBIT_NOTE",
+                    reference   = bill.billNumber,
+                    description = bill.description ?: "Debit note — ${bill.supplierName}",
+                    debit       = BigDecimal.ZERO,
+                    credit      = bill.totalAmount,
+                    balance     = running,
+                    status      = bill.status.name,
+                    documentId  = bill.id,
+                )
+            } else {
+                running = running.add(bill.totalAmount)
+                lines += SupplierStatementLine(
+                    date        = bill.billDate,
+                    type        = "BILL",
+                    reference   = bill.billNumber,
+                    description = bill.description ?: "Bill — ${bill.supplierName}",
+                    debit       = bill.totalAmount,
+                    credit      = BigDecimal.ZERO,
+                    balance     = running,
+                    status      = bill.status.name,
+                    documentId  = bill.id,
+                )
+                // Inline the payments for this bill sorted by date
+                val pmts = paymentsByBill[bill.id]?.sortedBy { it.paymentDate } ?: emptyList()
+                for (pmt in pmts) {
+                    running = running.subtract(pmt.amount)
+                    lines += SupplierStatementLine(
+                        date        = pmt.paymentDate,
+                        type        = "PAYMENT",
+                        reference   = pmt.reference ?: pmt.id.toString().takeLast(8).uppercase(),
+                        description = "Payment — ${pmt.paymentMethod?.name?.replace('_', ' ') ?: "Bank transfer"}",
+                        debit       = BigDecimal.ZERO,
+                        credit      = pmt.amount,
+                        balance     = running,
+                        status      = null,
+                        documentId  = pmt.id,
+                    )
+                }
+            }
+        }
+
+        // Re-sort everything by date then type (bills before payments on same day)
+        val sorted = lines.sortedWith(compareBy({ it.date }, { if (it.type == "PAYMENT") 1 else 0 }))
+
+        // Recompute running balance on sorted list
+        var bal = BigDecimal.ZERO
+        val finalLines = sorted.map { line ->
+            bal = bal.add(line.debit).subtract(line.credit)
+            line.copy(balance = bal)
+        }
+
+        val totalDebits  = finalLines.fold(BigDecimal.ZERO) { acc, l -> acc.add(l.debit) }
+        val totalCredits = finalLines.fold(BigDecimal.ZERO) { acc, l -> acc.add(l.credit) }
+
+        return SupplierStatementResponse(
+            supplierId     = supplier.id,
+            supplierName   = supplier.name,
+            supplierCode   = supplier.supplierCode,
+            currency       = bills.firstOrNull()?.currencyCode ?: "KES",
+            totalDebits    = totalDebits,
+            totalCredits   = totalCredits,
+            closingBalance = totalDebits.subtract(totalCredits),
+            lines          = finalLines,
+        )
+    }
 }

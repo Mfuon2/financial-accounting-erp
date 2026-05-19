@@ -3,6 +3,7 @@ package com.qesuite.accounting.ledger.service
 import com.qesuite.accounting.assets.domain.AssetStatus
 import com.qesuite.accounting.assets.domain.DepreciationMethod
 import com.qesuite.accounting.assets.repository.FixedAssetRepository
+import com.qesuite.accounting.coa.domain.AccountSubtype
 import com.qesuite.accounting.coa.repository.AccountRepository
 import com.qesuite.accounting.fx.repository.CurrencyRepository
 import com.qesuite.accounting.journal.service.CreateJournalEntryCommand
@@ -90,10 +91,11 @@ class LedgerService(
             .orElseThrow { ResourceNotFoundException("CUSTOMER_NOT_FOUND", customerId, "Customer") }
 
         val arAccountId = customer.defaultArAccountId
+            ?: accountRepository.findAllByEntityIdAndAccountSubtype(entityId, AccountSubtype.CURRENT_RECEIVABLE)
+                .firstOrNull()?.id
             ?: throw ValidationException(
-                errorCode = "CUSTOMER_AR_ACCOUNT_NOT_SET",
-                message   = "Customer ${customer.customerCode} has no default AR account configured. " +
-                            "Set defaultArAccountId on the customer master record."
+                errorCode = "AR_ACCOUNT_NOT_FOUND",
+                message   = "No Accounts Receivable account found. Add a CURRENT_RECEIVABLE account to the chart of accounts."
             )
 
         return ledgerEntryRepository.findByAccountIdOrderByTransDateAscCreatedAtAsc(arAccountId)

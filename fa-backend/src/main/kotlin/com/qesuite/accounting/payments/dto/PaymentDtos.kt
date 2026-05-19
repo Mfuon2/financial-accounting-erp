@@ -16,7 +16,7 @@ import java.util.UUID
 
 data class CreatePaymentCommand(
     @field:NotNull val entityId: UUID,
-    @field:NotNull val periodId: UUID,
+    val periodId: UUID?,
     @field:NotNull val customerId: UUID,
     val invoiceId: UUID?,
     @field:NotNull val paymentMethod: PaymentMethod,

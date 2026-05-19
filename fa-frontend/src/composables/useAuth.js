@@ -164,6 +164,12 @@ function getSessionStart() {
   try { return parseInt(sessionStorage.getItem(KEY_SESSION) ?? '0', 10) } catch { return 0 }
 }
 
+function updateUser(patch) {
+  if (!_user.value) return
+  _user.value = { ..._user.value, ...patch }
+  try { sessionStorage.setItem(KEY_USER, JSON.stringify(_user.value)) } catch {}
+}
+
 export function useAuth() {
   return {
     isAuthenticated,
@@ -175,6 +181,7 @@ export function useAuth() {
     silentRefresh,
     getAccessToken,
     getSessionStart,
+    updateUser,
     _clear,
   }
 }

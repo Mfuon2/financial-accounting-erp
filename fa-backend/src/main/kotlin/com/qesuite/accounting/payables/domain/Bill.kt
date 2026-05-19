@@ -1,5 +1,6 @@
 package com.qesuite.accounting.payables.domain
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import jakarta.persistence.*
 import java.math.BigDecimal
 import java.time.Instant
@@ -106,6 +107,7 @@ class BillItem(
     @Column(nullable = false, updatable = false)
     val id: UUID = UUID.randomUUID(),
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "bill_id", nullable = false)
     var bill: Bill? = null,

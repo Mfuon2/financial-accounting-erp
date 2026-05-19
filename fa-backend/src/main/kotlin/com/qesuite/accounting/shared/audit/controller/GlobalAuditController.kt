@@ -1,6 +1,6 @@
 package com.qesuite.accounting.shared.audit.controller
 
-import com.qesuite.accounting.shared.audit.domain.AuditLog
+import com.qesuite.accounting.shared.audit.service.AuditLogView
 import com.qesuite.accounting.shared.audit.service.AuditService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
@@ -41,7 +41,7 @@ class GlobalAuditController(
         @PageableDefault(size = 50, sort = ["createdAt"], direction = Sort.Direction.DESC)
         @Parameter(hidden = true)
         pageable: Pageable
-    ): ApiResponse<PagedResponse<AuditLog>> {
+    ): ApiResponse<PagedResponse<AuditLogView>> {
         val entityId = SecurityUtils.currentEntityIdOrSystem()
         val page = auditService.findByEntity(entityId, pageable)
         return ApiResponse.success(page.toPagedResponse { it })

@@ -5,6 +5,7 @@ import com.qesuite.accounting.tax.domain.TaxCode
 import com.qesuite.accounting.tax.domain.TaxRate
 import com.qesuite.accounting.tax.service.CreateTaxCodeCommand
 import com.qesuite.accounting.tax.service.CreateTaxRateCommand
+import com.qesuite.accounting.tax.service.TaxCodeView
 import com.qesuite.accounting.tax.service.TaxService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -41,8 +42,13 @@ class TaxController(
                 CreateTaxCodeCommand(
                     entityId = request.entityId,
                     code = request.code,
+                    name = request.name,
                     description = request.description,
-                    isRecoverable = request.isRecoverable
+                    taxType = request.taxType,
+                    accountCode = request.accountCode,
+                    isRecoverable = request.isRecoverable,
+                    initialRate = request.rate,
+                    effectiveFrom = request.effectiveFrom
                 )
             )
         )
@@ -50,10 +56,10 @@ class TaxController(
     @GetMapping("/codes")
     @Operation(
         summary = "List tax codes",
-        description = "Returns all tax codes defined for the given entity."
+        description = "Returns all tax codes for the entity, each with the current effective rate."
     )
-    fun listTaxCodes(@RequestParam entityId: UUID): ApiResponse<List<TaxCode>> =
-        ApiResponse.success(taxService.listTaxCodes(entityId))
+    fun listTaxCodes(@RequestParam entityId: UUID): ApiResponse<List<TaxCodeView>> =
+        ApiResponse.success(taxService.listTaxCodeViews(entityId))
 
     @GetMapping("/codes/{id}")
     @Operation(
@@ -133,8 +139,12 @@ class TaxController(
         @Valid @RequestBody request: UpdateTaxCodeRequest
     ): ApiResponse<TaxCode> {
         val command = com.qesuite.accounting.tax.service.UpdateTaxCodeCommand(
+            name = request.name,
             description = request.description,
-            isRecoverable = request.isRecoverable
+            taxType = request.taxType,
+            accountCode = request.accountCode,
+            isRecoverable = request.isRecoverable,
+            isActive = request.isActive
         )
         return ApiResponse.success(taxService.updateTaxCode(id, command))
     }
@@ -147,8 +157,13 @@ class TaxController(
 data class CreateTaxCodeRequest(
     @field:NotNull val entityId: UUID,
     @field:NotNull val code: String,
+    val name: String? = null,
     val description: String? = null,
-    val isRecoverable: Boolean = true
+    val taxType: String? = null,
+    val accountCode: String? = null,
+    val isRecoverable: Boolean = true,
+    val rate: BigDecimal? = null,
+    val effectiveFrom: LocalDate? = null
 )
 
 data class CreateTaxRateRequest(
@@ -175,6 +190,10 @@ data class TaxCalculationResult(
 )
 
 data class UpdateTaxCodeRequest(
+    val name: String? = null,
     val description: String? = null,
-    val isRecoverable: Boolean = true
+    val taxType: String? = null,
+    val accountCode: String? = null,
+    val isRecoverable: Boolean = true,
+    val isActive: Boolean = true
 )

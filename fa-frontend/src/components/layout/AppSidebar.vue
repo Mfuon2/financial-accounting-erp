@@ -2,6 +2,13 @@
 import Ico from '@/components/primitives/Ico.vue'
 import IconBtn from '@/components/primitives/IconBtn.vue'
 import { computed } from 'vue'
+import { useAuth } from '@/composables/useAuth.js'
+import { useSetupChecks } from '@/composables/useSetupChecks.js'
+import { useOrganization } from '@/composables/useOrganization.js'
+import { useActivePeriod } from '@/composables/useActivePeriod.js'
+const { totalIssues } = useSetupChecks()
+const { org } = useOrganization()
+const { activePeriod } = useActivePeriod()
 
 const props = defineProps({
   activeRoute: { type: String },
@@ -9,6 +16,27 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['navigate', 'update:tweaks'])
+
+const { currentUser } = useAuth()
+
+const userInitials = computed(() => {
+  const name = currentUser.value?.fullName ?? ''
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  return name.slice(0, 2).toUpperCase() || '?'
+})
+
+const userDisplayName = computed(() => currentUser.value?.fullName ?? 'User')
+const userRole = computed(() => (currentUser.value?.role ?? '').replace(/_/g, ' '))
+
+const orgName = computed(() => org.value?.name ?? 'Loading…')
+const orgMeta = computed(() => {
+  const reg = org.value?.registrationNumber
+  const shortId = reg ?? (org.value?.id ? String(org.value.id).slice(0, 8).toUpperCase() : '—')
+  const fy = activePeriod.value?.startDate?.slice(0, 4) ?? new Date().getFullYear()
+  const ccy = org.value?.functionalCurrency ?? '—'
+  return `${shortId} · FY ${fy} · ${ccy}`
+})
 
 const NAV_ROUTES = [
   { id: "dashboard",    label: "Dashboard",         icon: "chart",      route: "/dashboard",    group: "Overview" },
@@ -40,6 +68,7 @@ const NAV_ROUTES = [
   { id: "audit",        label: "Audit Trail",       icon: "shield",     route: "/audit",        group: "Reports" },
   { id: "ias1",         label: "IAS 1 Compliance",  icon: "check",      route: "/ias1",         group: "Reports" },
   { id: "comparative",  label: "Comparative TB",    icon: "scale",      route: "/comparative",  group: "Reports" },
+  { id: "setup-health", label: "System Health",     icon: "shield",     route: "/setup-health", group: "Setup" },
   { id: "organization", label: "Organization",      icon: "building",   route: "/organization", group: "Setup" },
   { id: "users",        label: "Users",             icon: "users",      route: "/users",        group: "Setup" },
   { id: "api-keys",     label: "API Keys",          icon: "key",        route: "/api-keys",     group: "Setup" },
@@ -67,8 +96,8 @@ const groups = computed(() => {
     <div class="entity-switcher">
       <span class="entity-dot"/>
       <div class="ent-text">
-        <div class="ent-name">Apollo Enterprises Ltd</div>
-        <div class="ent-meta">ORG-1A3F · FY 2026 · KES</div>
+        <div class="ent-name">{{ orgName }}</div>
+        <div class="ent-meta">{{ orgMeta }}</div>
       </div>
       <Ico name="chev-down" :size="11" style="color:var(--muted)"/>
     </div>
@@ -91,19 +120,42 @@ const groups = computed(() => {
               <Ico :name="item.icon" :size="14"/>
             </span>
             <span>{{ item.label }}</span>
+            <span
+              v-if="item.id === 'setup-health' && totalIssues > 0"
+              class="health-badge"
+            >{{ totalIssues }}</span>
           </div>
         </div>
       </div>
     </nav>
     <div class="sidebar-foot">
-      <div class="user-chip">
-        <div class="user-avatar">JM</div>
+      <div class="user-chip" style="cursor:pointer" title="My Profile" @click="emit('navigate', '/profile')">
+        <div class="user-avatar">{{ userInitials }}</div>
         <div style="flex:1;min-width:0">
-          <div class="u-name">Jane Muriuki</div>
-          <div class="u-role">ADMIN · MFA on</div>
+          <div class="u-name">{{ userDisplayName }}</div>
+          <div class="u-role">{{ userRole }}</div>
         </div>
       </div>
       <IconBtn icon="settings" title="Settings" @click="emit('navigate', '/organization')"/>
     </div>
   </aside>
 </template>
+
+<style scoped>
+.health-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--neg);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+</style>

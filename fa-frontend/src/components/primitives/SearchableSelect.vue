@@ -138,6 +138,7 @@ function onSearchKeydown(e) {
                  : len === 1 ? flatFiltered.value[0] : null
     if (target) pick(target)
   } else if (e.key === 'Escape' || e.key === 'Tab') {
+    e.stopPropagation()
     closeDrop()
     triggerEl.value?.focus()
   }

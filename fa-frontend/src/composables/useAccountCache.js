@@ -1,11 +1,13 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { accounts as accountsApi } from '@/api/index.js'
 
 // Module-level singleton — survives across component mounts
-const _accounts  = ref([])
-const _entityId  = ref(null)
-const _loaded    = ref(false)
-const _loading   = ref(false)
+const _accounts         = ref([])
+const _entityId         = ref(null)
+const _loaded           = ref(false)
+const _loading          = ref(false)
+// Derived: only leaf accounts that can receive direct postings
+const _postableAccounts = computed(() => _accounts.value.filter(a => !a.isHeader))
 
 export function useAccountCache() {
   async function load(entityId) {
@@ -30,8 +32,9 @@ export function useAccountCache() {
   }
 
   return {
-    accounts: _accounts,
-    loading:  _loading,
+    accounts:         _accounts,
+    postableAccounts: _postableAccounts,
+    loading:          _loading,
     load,
     invalidate,
   }

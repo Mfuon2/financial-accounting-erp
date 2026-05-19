@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { TRIAL_BALANCE } from '@/data/index.js'
 import { reports } from '@/api/index.js'
+import { useAuth }    from '@/composables/useAuth.js'
+import { useAppMode } from '@/composables/useAppMode.js'
 import { fmt } from '@/utils/format.js'
 import { useToast } from '@/composables/useToast.js'
 import PageHeader from '@/components/PageHeader.vue'
@@ -13,7 +15,11 @@ import TableFooter from '@/components/tables/TableFooter.vue'
 import Modal from '@/components/overlays/Modal.vue'
 import TAccount from '@/components/data-display/TAccount.vue'
 
-const { toast } = useToast()
+const { toast }       = useToast()
+const { currentUser } = useAuth()
+const { isDemo }      = useAppMode()
+
+const entityId = computed(() => currentUser.value?.entityId ?? null)
 
 const DEMO_REPORT = {
   entityId: 'demo', asOfDate: '2026-02-28',
@@ -22,11 +28,13 @@ const DEMO_REPORT = {
   totalCredits: TRIAL_BALANCE.reduce((s, r) => s + (r.cr  || 0), 0),
 }
 
-const mode     = ref('TRIAL_BALANCE')
-const asOfDate = ref(new Date().toISOString().slice(0, 10))
-const report   = ref(DEMO_REPORT)
-const loading  = ref(false)
-const tacctDrawer = ref(null)
+const mode             = ref('TRIAL_BALANCE')
+const asOfDate         = ref(new Date().toISOString().slice(0, 10))
+const report           = ref(isDemo.value ? DEMO_REPORT : null)
+const loading          = ref(false)
+const outOfBalance     = ref(false)
+const tacctDrawer      = ref(null)
+const showZeroBalances = ref(false)
 
 const tabs = [
   { id: 'TRIAL_BALANCE', label: 'Trial Balance' },
@@ -34,36 +42,67 @@ const tabs = [
 ]
 
 async function load() {
-  loading.value = true
+  if (isDemo.value) {
+    report.value = DEMO_REPORT
+    outOfBalance.value = false
+    return
+  }
+  if (!entityId.value) return
+  loading.value    = true
+  outOfBalance.value = false
   try {
-    const res = await reports.trialBalance({ entityId: 'current', asOfDate: asOfDate.value })
+    const res = await reports.trialBalance({ entityId: entityId.value, asOfDate: asOfDate.value })
     if (res) report.value = res
-  } catch { /* stays on demo */ } finally {
+  } catch {
+    outOfBalance.value = true
+  } finally {
     loading.value = false
   }
 }
 
 onMounted(load)
 watch(asOfDate, load)
+watch(entityId, (val) => { if (val) load() })
 
 const rows = computed(() => {
   if (!report.value?.rows) return []
+  let base = report.value.rows
   if (mode.value === 'POST_CLOSING') {
-    return report.value.rows.filter(r => !r.accountCode.startsWith('4') && !r.accountCode.startsWith('5'))
+    base = base.filter(r => !r.accountCode.startsWith('4') && !r.accountCode.startsWith('5'))
   }
-  return report.value.rows
+  if (!showZeroBalances.value) {
+    base = base.filter(r => (r.debitBalance || 0) !== 0 || (r.creditBalance || 0) !== 0)
+  }
+  return base
 })
 
 const drTotal  = computed(() => rows.value.reduce((s, r) => s + (r.debitBalance  || 0), 0))
 const crTotal  = computed(() => rows.value.reduce((s, r) => s + (r.creditBalance || 0), 0))
-const balanced = computed(() => Math.abs((report.value?.totalDebits || 0) - (report.value?.totalCredits || 0)) < 0.01)
+
+function rowStyle(r) {
+  const indent = r.depth * 16
+  if (r.isHeader && r.depth === 0) return { fontWeight: '700', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.04em', color: 'var(--text-muted)' }
+  if (r.isHeader) return { paddingLeft: indent + 'px', fontWeight: '600' }
+  return { paddingLeft: indent + 'px' }
+}
+
+function trStyle(r) {
+  if (r.isHeader && r.depth === 0) return { background: 'var(--surface-alt, var(--surface))', borderTop: '2px solid var(--border)' }
+  if (r.isHeader) return { background: 'color-mix(in oklab, var(--border) 30%, transparent)' }
+  return {}
+}
+const balanced = computed(() => {
+  if (outOfBalance.value) return false
+  if (!report.value) return true
+  return Math.abs((report.value.totalDebits || 0) - (report.value.totalCredits || 0)) < 0.01
+})
 </script>
 
 <template>
   <div class="page">
     <PageHeader
       title="Trial Balance"
-      :meta="`As at ${report.asOfDate ?? asOfDate}`"
+      :meta="`As at ${report?.asOfDate ?? asOfDate}`"
       :tabs="tabs"
       :activeTab="mode"
       @tab="mode = $event"
@@ -74,34 +113,49 @@ const balanced = computed(() => Math.abs((report.value?.totalDebits || 0) - (rep
         class="date-input"
         style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"
       />
+      <Button
+        :variant="showZeroBalances ? 'primary' : 'ghost'"
+        icon="ledger"
+        @click="showZeroBalances = !showZeroBalances"
+        :title="showZeroBalances ? 'Showing all accounts (including zero balances)' : 'Showing active balances only — click to include zero balances'"
+      >{{ showZeroBalances ? 'All accounts' : 'Active only' }}</Button>
       <Button variant="ghost" icon="download">Export</Button>
     </PageHeader>
 
     <div class="page-section stack">
-      <Banner :kind="balanced ? 'success' : 'warn'" :icon="balanced ? 'check' : 'warn'">
-        <template v-if="balanced">Trial balance is balanced — debits equal credits.</template>
-        <template v-else>Out of balance — review posting pipeline integrity.</template>
+      <Banner v-if="outOfBalance" kind="error" icon="warn">
+        Trial balance is out of balance — raw ledger debits ≠ credits. This indicates a posting pipeline integrity error. Contact your system administrator.
+      </Banner>
+      <Banner v-else-if="report && balanced" kind="success" icon="check">
+        Trial balance is balanced — debits equal credits.
+      </Banner>
+      <Banner v-else-if="report && !balanced" kind="warn" icon="warn">
+        Out of balance — review posting pipeline integrity.
       </Banner>
 
-      <div class="card" style="margin-top:var(--gap)">
+      <div v-if="loading && !report" class="card" style="margin-top:var(--gap);padding:48px;text-align:center;color:var(--text-muted)">
+        Loading trial balance…
+      </div>
+
+      <div v-else-if="report" class="card" style="margin-top:var(--gap)">
         <table class="tbl">
           <thead>
             <tr>
               <th>Code</th>
               <th>Account</th>
-              <th class="num">Debit (KES)</th>
-              <th class="num">Credit (KES)</th>
+              <th class="num">Debit</th>
+              <th class="num">Credit</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in rows" :key="r.accountCode">
-              <td><code>{{ r.accountCode }}</code></td>
-              <td>{{ r.accountName }}</td>
+            <tr v-for="r in rows" :key="r.accountCode" :style="trStyle(r)">
+              <td style="white-space:nowrap"><code style="font-size:11px">{{ r.accountCode }}</code></td>
+              <td :style="rowStyle(r)">{{ r.accountName }}</td>
               <td class="num mono">{{ r.debitBalance  ? fmt(r.debitBalance)  : '—' }}</td>
               <td class="num mono">{{ r.creditBalance ? fmt(r.creditBalance) : '—' }}</td>
               <td>
-                <IconBtn icon="ledger" @click="tacctDrawer = r" />
+                <IconBtn v-if="!r.isHeader" icon="ledger" @click="tacctDrawer = r" />
               </td>
             </tr>
           </tbody>
@@ -121,7 +175,7 @@ const balanced = computed(() => Math.abs((report.value?.totalDebits || 0) - (rep
         </table>
       </div>
 
-      <TableFooter :total="rows.length" label="accounts" />
+      <TableFooter v-if="report" :total="rows.length" :label="showZeroBalances ? 'accounts (incl. zero balances)' : 'accounts with active balances'" />
     </div>
 
     <Modal

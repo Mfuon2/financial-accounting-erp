@@ -37,6 +37,7 @@ data class CreateCustomerCommand(
     val email: String? = null,
 
     @Schema(example = "+254712345678")
+    @Pattern(regexp = "^\\+[1-9]\\d{1,14}$", message = "Phone must be in E.164 format (e.g. +254712345678)")
     val phone: String? = null,
 
     @Schema(example = "50000.000000")
@@ -132,6 +133,7 @@ data class CreateSupplierCommand(
     val email: String? = null,
 
     @Schema(example = "+254712345678")
+    @Pattern(regexp = "^\\+[1-9]\\d{1,14}$", message = "Phone must be in E.164 format (e.g. +254712345678)")
     val phone: String? = null,
 
     @Schema(example = "NET_30")

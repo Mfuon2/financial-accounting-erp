@@ -1,6 +1,5 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { USERS } from '@/data/index.js'
 import { users as usersApi } from '@/api/index.js'
 import { fmtDate } from '@/utils/format.js'
 import { useToast } from '@/composables/useToast.js'
@@ -21,7 +20,7 @@ const { currentUser } = useAuth()
 const ROLES = ['SYSTEM_ADMIN', 'CONTROLLER_CFO', 'SENIOR_ACCOUNTANT', 'ACCOUNTANT', 'AUDITOR', 'DATA_ENTRY']
 const roleStatus = { SYSTEM_ADMIN: 'solid-fg', CONTROLLER_CFO: 'pending', SENIOR_ACCOUNTANT: 'info', ACCOUNTANT: 'info', AUDITOR: 'pending', DATA_ENTRY: 'outline' }
 
-const usersList = ref([...USERS])
+const usersList = ref([])
 const drawer = ref(null)
 const form = ref(null)
 const showNew = ref(false)
@@ -37,7 +36,7 @@ onMounted(async () => {
     const data = await usersApi.list({ entityId })
     if (Array.isArray(data)) usersList.value = data
     else if (data?.content) usersList.value = data.content
-  } catch { /* stays on static data */ }
+  } catch { /* leave list empty on API error */ }
 })
 
 watch(drawer, (u) => {

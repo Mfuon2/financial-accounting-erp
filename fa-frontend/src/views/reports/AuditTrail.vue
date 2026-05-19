@@ -88,7 +88,7 @@ function formatTs(ts) {
 }
 
 function actorLabel(e) {
-  return e.actor ?? e.userId ?? '—'
+  return e.actorName ?? e.actor ?? (e.userId ? String(e.userId).slice(0, 8) + '…' : '—')
 }
 
 function targetLabel(e) {
@@ -142,7 +142,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(totalElements.value / PA
           <thead>
             <tr>
               <th style="width:160px">Timestamp</th>
-              <th style="width:180px">Actor (User ID)</th>
+              <th style="width:180px">Actor</th>
               <th style="width:120px">Action</th>
               <th style="width:200px">Target</th>
               <th>Detail</th>
@@ -162,9 +162,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(totalElements.value / PA
               <td class="mono muted" style="font-size:11px;white-space:nowrap">
                 {{ formatTs(e.ts ?? e.createdAt) }}
               </td>
-              <td>
-                <code class="actor-code">{{ actorLabel(e) }}</code>
-              </td>
+              <td style="font-size:12.5px;font-weight:500">{{ actorLabel(e) }}</td>
               <td>
                 <Badge :status="actionStatus(e.action)" :dot="false">{{ e.action ?? '—' }}</Badge>
               </td>

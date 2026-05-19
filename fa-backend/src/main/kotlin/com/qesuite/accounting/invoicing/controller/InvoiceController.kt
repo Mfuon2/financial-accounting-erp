@@ -130,7 +130,7 @@ class InvoiceController(
     fun applyPayment(
         @PathVariable @Parameter(description = "Invoice UUID") id: UUID,
         @Valid @RequestBody command: ApplyInvoicePaymentCommand
-    ): ApiResponse<InvoiceStatus> =
+    ): ApiResponse<Invoice> =
         ApiResponse.success(invoiceService.applyPayment(id, command.paymentAmount))
 
     @GetMapping("/ar-ageing")

@@ -685,7 +685,8 @@ class BillService(
             if (apId != null) return apId
         }
         return accountRepository.findAllByEntityIdAndAccountSubtype(bill.entityId, AccountSubtype.CURRENT_PAYABLE)
-            .firstOrNull { it.isActive }?.id
+            .filter { !it.isHeader }
+            .minByOrNull { it.accountCode }?.id
             ?: throw BusinessRuleViolationException(
                 errorCode = "MISSING_AP_ACCOUNT",
                 message   = "No CURRENT_PAYABLE account found for entity ${bill.entityId}. Configure an Accounts Payable account in the Chart of Accounts.",
@@ -699,7 +700,8 @@ class BillService(
             if (found != null && found.isActive) return found.id
         }
         return accountRepository.findAllByEntityIdAndAccountSubtype(entityId, AccountSubtype.OPERATING_EXPENSES)
-            .firstOrNull { it.isActive }?.id
+            .filter { !it.isHeader }
+            .minByOrNull { it.accountCode }?.id
             ?: throw BusinessRuleViolationException(
                 errorCode = "MISSING_EXPENSE_ACCOUNT",
                 message   = "No OPERATING_EXPENSES account found for entity $entityId. Configure an expense account in the Chart of Accounts.",
@@ -708,8 +710,8 @@ class BillService(
     }
 
     private fun findInputVatAccount(entityId: UUID): UUID? =
-        accountRepository.findAllByEntityId(entityId).firstOrNull { acct ->
-            acct.isActive &&
+        accountRepository.findAllByEntityId(entityId).filter { !it.isHeader }.firstOrNull { acct ->
+            acct.isActive && !acct.isHeader &&
                 acct.accountSubtype in listOf(AccountSubtype.CURRENT_PREPAID, AccountSubtype.CURRENT_RECEIVABLE) &&
                 (acct.accountName.contains("VAT", ignoreCase = true) ||
                     acct.accountName.contains("Input Tax", ignoreCase = true) ||
@@ -718,7 +720,8 @@ class BillService(
 
     private fun findCashAccount(entityId: UUID): UUID =
         accountRepository.findAllByEntityIdAndAccountSubtype(entityId, AccountSubtype.CASH_AND_EQUIVALENTS)
-            .firstOrNull { it.isActive }?.id
+            .filter { !it.isHeader }
+            .minByOrNull { it.accountCode }?.id
             ?: throw BusinessRuleViolationException(
                 errorCode = "MISSING_CASH_ACCOUNT",
                 message   = "No CASH_AND_EQUIVALENTS account found for entity $entityId.",

@@ -28,4 +28,9 @@ export const codes = {
   generate: (entityId, prefix) => isDemo.value
     ? Promise.resolve({ prefix: prefix.toUpperCase(), code: demoCode(prefix) })
     : get(`/api/v1/codes/generate?${new URLSearchParams({ entityId, prefix })}`),
+
+  /** Peek next code for every registered prefix — useful for dashboard pre-population. */
+  all: (entityId) => isDemo.value
+    ? Promise.resolve({})
+    : get(`/api/v1/codes/all?${new URLSearchParams({ entityId })}`),
 }

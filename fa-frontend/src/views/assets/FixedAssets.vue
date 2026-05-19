@@ -211,6 +211,11 @@ async function openNew() {
 }
 
 async function saveNew() {
+  if (!newForm.value.assetName?.trim())       return toast.error('Asset name is required.')
+  if (!newForm.value.acquisitionCost)         return toast.error('Acquisition cost is required.')
+  if (!newForm.value.costAccountId)           return toast.error('Asset cost account is required.')
+  if (!newForm.value.accumDepAccountId)       return toast.error('Accumulated depreciation account is required.')
+  if (!newForm.value.depExpenseAccountId)     return toast.error('Depreciation expense account is required.')
   newSaving.value = true
   try {
     const body = {

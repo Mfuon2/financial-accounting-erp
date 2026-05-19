@@ -1,6 +1,5 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ORG } from '@/data/index.js'
 import { organization, numberConfig as numberConfigApi } from '@/api/index.js'
 import { useAppMode, isDemo } from '@/composables/useAppMode.js'
 import { useAuth } from '@/composables/useAuth.js'
@@ -18,8 +17,8 @@ const entityId = computed(() => currentUser.value?.entityId)
 const tab = ref('profile')
 
 // ── Company profile ────────────────────────────────────────────────────────────
-const form     = ref({ ...ORG })
-const original = ref({ ...ORG })
+const form     = ref({})
+const original = ref({})
 const saving   = ref(false)
 
 onMounted(async () => {

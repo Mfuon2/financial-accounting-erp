@@ -7,6 +7,7 @@ import com.qesuite.accounting.fx.repository.CurrencyRepository
 import com.qesuite.accounting.fx.repository.ExchangeRateRepository
 import com.qesuite.accounting.fx.service.ExchangeRateService
 import com.qesuite.accounting.fx.service.FXRevaluationService
+import com.qesuite.accounting.fx.service.RevaluationPreviewResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
@@ -91,7 +92,9 @@ class FxController(
             entityId = command.entityId,
             currencyCode = command.currencyCode,
             currencyName = command.currencyName,
-            isFunctional = command.isFunctional
+            isFunctional = command.isFunctional,
+            symbol = command.symbol,
+            decimals = command.decimals
         )
         return ApiResponse.success(currencyRepository.save(currency))
     }
@@ -116,6 +119,8 @@ class FxController(
             ResourceNotFoundException("CURRENCY_NOT_FOUND", id, "Currency")
         }
         currency.currencyName = request.currencyName
+        request.symbol?.let { currency.symbol = it }
+        request.decimals?.let { currency.decimals = it }
         return ApiResponse.success(currencyRepository.save(currency))
     }
 
@@ -140,6 +145,16 @@ class FxController(
         )
         return ApiResponse.success(exchangeRateService.saveRate(rate))
     }
+
+    @GetMapping("/exchange-rates/all")
+    @Operation(
+        summary = "List all exchange rates for an entity",
+        description = "Returns all exchange rate records for the entity, ordered by date descending then from-currency ascending."
+    )
+    fun listExchangeRates(
+        @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID
+    ): ApiResponse<List<ExchangeRate>> =
+        ApiResponse.success(exchangeRateRepository.findAllByEntityIdOrderByRateDateDescFromCurrencyAsc(entityId))
 
     @GetMapping("/exchange-rates")
     @Operation(
@@ -174,6 +189,17 @@ class FxController(
     }
 
     // ─── Revaluation ──────────────────────────────────────────────────────────
+
+    @GetMapping("/revaluation/preview")
+    @Operation(
+        summary = "Preview FX revaluation",
+        description = "Returns indicative revaluation data per monetary-item account — balances, prior rate, closing rate, and P&L delta — without posting any journal entries."
+    )
+    fun previewRevaluation(
+        @RequestParam entityId: UUID,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate
+    ): ApiResponse<RevaluationPreviewResponse> =
+        ApiResponse.success(fxRevaluationService.previewRevaluation(entityId, date))
 
     @PostMapping("/revaluation")
     @Operation(
@@ -214,7 +240,11 @@ data class CreateCurrencyCommand(
     @field:NotBlank(message = "Currency name is required")
     val currencyName: String,
 
-    val isFunctional: Boolean = false
+    val isFunctional: Boolean = false,
+
+    val symbol: String? = null,
+
+    val decimals: Int = 2
 )
 
 data class CreateExchangeRateCommand(
@@ -256,7 +286,11 @@ data class RunRevaluationCommand(
 
 data class UpdateCurrencyRequest(
     @field:NotBlank(message = "Currency name is required")
-    val currencyName: String
+    val currencyName: String,
+
+    val symbol: String? = null,
+
+    val decimals: Int? = null
 )
 
 data class UpdateExchangeRateRequest(

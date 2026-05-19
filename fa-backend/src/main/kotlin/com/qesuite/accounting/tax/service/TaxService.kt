@@ -137,11 +137,26 @@ class TaxService(
         val taxCode = TaxCode(
             entityId = command.entityId,
             code = command.code,
+            name = command.name,
             description = command.description,
+            taxType = command.taxType,
+            accountCode = command.accountCode,
             isRecoverable = command.isRecoverable
         )
 
-        return taxCodeRepository.save(taxCode)
+        val saved = taxCodeRepository.save(taxCode)
+
+        // Create the initial rate in one transaction if provided
+        if (command.initialRate != null) {
+            taxRateRepository.save(TaxRate(
+                entityId = command.entityId,
+                taxCode = saved,
+                rate = command.initialRate,
+                effectiveFrom = command.effectiveFrom ?: LocalDate.now()
+            ))
+        }
+
+        return saved
     }
 
     /**
@@ -176,6 +191,15 @@ class TaxService(
     fun listTaxCodes(entityId: UUID): List<TaxCode> =
         taxCodeRepository.findByEntityId(entityId)
 
+    @Transactional(readOnly = true)
+    fun listTaxCodeViews(entityId: UUID): List<TaxCodeView> {
+        val today = LocalDate.now()
+        return taxCodeRepository.findByEntityId(entityId).map { tc ->
+            val rate = taxRateRepository.findEffectiveRate(tc.id!!, today)
+            TaxCodeView(tc, rate)
+        }
+    }
+
     /**
      * §13.2 — List all tax rates for a given tax code.
      */
@@ -188,12 +212,12 @@ class TaxService(
      */
     fun updateTaxCode(id: UUID, command: UpdateTaxCodeCommand): TaxCode {
         val taxCode = getTaxCodeById(id)
-
-        // Only allow updating description and recoverability
-        // Code string is typically a business key and shouldn't change
+        taxCode.name = command.name
         taxCode.description = command.description
+        taxCode.taxType = command.taxType
+        taxCode.accountCode = command.accountCode
         taxCode.isRecoverable = command.isRecoverable
-
+        taxCode.isActive = command.isActive
         return taxCodeRepository.save(taxCode)
     }
 }
@@ -201,8 +225,13 @@ class TaxService(
 data class CreateTaxCodeCommand(
     val entityId: UUID,
     val code: String,
+    val name: String?,
     val description: String?,
-    val isRecoverable: Boolean = true
+    val taxType: String?,
+    val accountCode: String?,
+    val isRecoverable: Boolean = true,
+    val initialRate: BigDecimal? = null,
+    val effectiveFrom: LocalDate? = null
 )
 
 data class CreateTaxRateCommand(
@@ -213,6 +242,36 @@ data class CreateTaxRateCommand(
 )
 
 data class UpdateTaxCodeCommand(
+    val name: String?,
     val description: String?,
-    val isRecoverable: Boolean
+    val taxType: String?,
+    val accountCode: String?,
+    val isRecoverable: Boolean,
+    val isActive: Boolean
 )
+
+data class TaxCodeView(
+    val id: java.util.UUID,
+    val code: String,
+    val name: String?,
+    val description: String?,
+    val taxType: String?,
+    val accountCode: String?,
+    val isRecoverable: Boolean,
+    val isActive: Boolean,
+    val currentRate: BigDecimal?,
+    val currentRateId: java.util.UUID?
+) {
+    constructor(tc: com.qesuite.accounting.tax.domain.TaxCode, rate: com.qesuite.accounting.tax.domain.TaxRate?) : this(
+        id = tc.id!!,
+        code = tc.code,
+        name = tc.name,
+        description = tc.description,
+        taxType = tc.taxType,
+        accountCode = tc.accountCode,
+        isRecoverable = tc.isRecoverable,
+        isActive = tc.isActive,
+        currentRate = rate?.rate,
+        currentRateId = rate?.id
+    )
+}

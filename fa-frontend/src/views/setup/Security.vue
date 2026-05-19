@@ -1,6 +1,5 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { SESSIONS } from '@/data/index.js'
 import { auth } from '@/api/index.js'
 import { useToast } from '@/composables/useToast.js'
 import { useAuth } from '@/composables/useAuth.js'
@@ -16,7 +15,7 @@ import TableFooter from '@/components/tables/TableFooter.vue'
 const { toast } = useToast()
 const { getSessionStart } = useAuth()
 
-const sessions = ref([...SESSIONS])
+const sessions = ref([])
 const showPwd = ref(false)
 const pwdForm = ref({ current: '', next: '', confirm: '' })
 const savingPwd = ref(false)
@@ -43,7 +42,7 @@ onMounted(async () => {
       }
       sessions.value = data.map(s => ({ ...s, current: s.id === currentId }))
     }
-  } catch { /* stays on demo */ }
+  } catch { /* leave sessions empty on API error */ }
 })
 
 function formatSession(s) {

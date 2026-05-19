@@ -1,12 +1,14 @@
 package com.qesuite.accounting.ap.controller
 
 import com.ninjasquad.springmockk.MockkBean
+import com.qesuite.accounting.ap.domain.Period
 import com.qesuite.accounting.ap.domain.PeriodStatus
 import com.qesuite.accounting.ap.service.PeriodService
 import com.qesuite.accounting.integration.service.ApiKeyService
 import com.qesuite.accounting.shared.security.JwtService
 import io.mockk.every
 import io.mockk.just
+import io.mockk.mockk
 import io.mockk.runs
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -55,7 +57,7 @@ class PeriodControllerTest {
     fun `should transition period`() {
         // Given
         val periodId = UUID.randomUUID()
-        every { periodService.transitionPeriod(periodId, PeriodStatus.OPEN) } just runs
+        every { periodService.transitionPeriod(periodId, PeriodStatus.OPEN) } returns mockk<Period>(relaxed = true)
 
         // When/Then
         mockMvc.post("/api/v1/periods/$periodId/transition") {

@@ -6,10 +6,13 @@ import com.qesuite.accounting.ap.repository.PeriodRepository
 import com.qesuite.accounting.shared.audit.annotation.AuditResourceId
 import com.qesuite.accounting.shared.audit.annotation.Auditable
 import com.qesuite.accounting.shared.audit.domain.AuditAction
+import com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
+import com.qesuite.accounting.shared.security.SecurityUtils
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 import java.time.LocalDate
 import java.util.*
 
@@ -33,6 +36,9 @@ class PeriodService(private val periodRepository: PeriodRepository) {
             )
         }
 
+        // BUG-27: All periods start as FUTURE so that generating a historical FY never
+        // auto-switches the active context. Users must explicitly open the first period
+        // they want to start using via the transition endpoint.
         val periods = (1..12).map { month ->
             val start = LocalDate.of(startYear, month, 1)
             val end = start.plusMonths(1).minusDays(1)
@@ -41,7 +47,7 @@ class PeriodService(private val periodRepository: PeriodRepository) {
                 periodName = "${start.month} $startYear",
                 startDate = start,
                 endDate = end,
-                status = if (month == 1) PeriodStatus.OPEN else PeriodStatus.FUTURE
+                status = PeriodStatus.FUTURE
             )
         }
         periodRepository.saveAll(periods)
@@ -73,9 +79,9 @@ class PeriodService(private val periodRepository: PeriodRepository) {
     @Transactional
     @Auditable(action = AuditAction.UPDATE, resourceType = "ACCOUNTING_PERIOD")
     fun transitionPeriod(
-        @AuditResourceId periodId: UUID, 
+        @AuditResourceId periodId: UUID,
         nextStatus: PeriodStatus
-    ) {
+    ): Period {
         val period = periodRepository.findById(periodId)
             .orElseThrow { ValidationException("PERIOD_NOT_FOUND", "Period $periodId not found.") }
 
@@ -86,13 +92,31 @@ class PeriodService(private val periodRepository: PeriodRepository) {
             )
         }
 
+        // BUG-25: Only one OPEN period is allowed per entity at any time.
+        if (nextStatus == PeriodStatus.OPEN &&
+            periodRepository.existsByEntityIdAndStatus(period.entityId, PeriodStatus.OPEN)
+        ) {
+            throw BusinessRuleViolationException(
+                errorCode = "PERIOD_ALREADY_OPEN",
+                message = "Another period is already OPEN. Close it before opening a new one."
+            )
+        }
+
         period.status = nextStatus
-        periodRepository.save(period)
+
+        // BUG-30: Capture audit trail when a period is closed.
+        if (nextStatus == PeriodStatus.CLOSED) {
+            val currentUser = try { SecurityUtils.currentUser() } catch (_: Exception) { null }
+            period.closedByUserId = currentUser?.userId
+            period.closedAt = Instant.now()
+        }
+
+        return periodRepository.save(period)
     }
 
     @Transactional
     @Auditable(action = AuditAction.CLOSE, resourceType = "ACCOUNTING_PERIOD")
-    fun closePeriod(@AuditResourceId periodId: UUID) {
-        transitionPeriod(periodId, PeriodStatus.CLOSED)
+    fun closePeriod(@AuditResourceId periodId: UUID): Period {
+        return transitionPeriod(periodId, PeriodStatus.CLOSED)
     }
 }

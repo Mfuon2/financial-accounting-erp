@@ -47,6 +47,9 @@ class CodeGeneratorService(
      * REQUIRES_NEW so the increment commits independently of the caller's transaction.
      * Pass [yearScoped] and [padWidth] explicitly when using a dynamic/configured prefix
      * that may not be in the built-in YEAR_SCOPED / PAD_WIDTH maps.
+     * Pass [fiscalYear] to override the default (calendar year) for year-scoped sequences —
+     * used by journal entries to scope references to the period's fiscal year rather than
+     * the current wall-clock year.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun next(
@@ -55,9 +58,10 @@ class CodeGeneratorService(
         yearScoped: Boolean = rawPrefix.uppercase() in YEAR_SCOPED,
         padWidth: Int = PAD_WIDTH[rawPrefix.uppercase()] ?: 4,
         customFormat: String? = null,
+        fiscalYear: Int? = null,
     ): String {
         val prefix = rawPrefix.uppercase()
-        return if (yearScoped) nextYearScoped(entityId, prefix, padWidth, customFormat)
+        return if (yearScoped) nextYearScoped(entityId, prefix, padWidth, customFormat, fiscalYear)
                else nextSimple(entityId, prefix, padWidth, customFormat)
     }
 
@@ -73,12 +77,13 @@ class CodeGeneratorService(
         yearScoped: Boolean = rawPrefix.uppercase() in YEAR_SCOPED,
         padWidth: Int = PAD_WIDTH[rawPrefix.uppercase()] ?: 4,
         customFormat: String? = null,
+        fiscalYear: Int? = null,
         isUnique: (String) -> Boolean,
     ): String {
         var code: String
         var attempts = 0
         do {
-            code = next(entityId, rawPrefix, yearScoped, padWidth, customFormat)
+            code = next(entityId, rawPrefix, yearScoped, padWidth, customFormat, fiscalYear)
             attempts++
             if (attempts > 50) break  // safety valve — should never happen in practice
         } while (!isUnique(code))
@@ -115,13 +120,18 @@ class CodeGeneratorService(
 
     /** Convenience — unpacks a [PrefixConfig] and calls [nextUnique]. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    fun nextUniqueForConfig(entityId: UUID, config: PrefixConfig, isUnique: (String) -> Boolean): String =
-        nextUnique(entityId, config.prefix, config.yearScoped, customFormat = config.customFormat, isUnique = isUnique)
+    fun nextUniqueForConfig(
+        entityId: UUID,
+        config: PrefixConfig,
+        fiscalYear: Int? = null,
+        isUnique: (String) -> Boolean,
+    ): String =
+        nextUnique(entityId, config.prefix, config.yearScoped, customFormat = config.customFormat, fiscalYear = fiscalYear, isUnique = isUnique)
 
     // ── internals ─────────────────────────────────────────────────────────────
 
-    private fun nextYearScoped(entityId: UUID, prefix: String, padWidth: Int, customFormat: String?): String {
-        val year = Year.now().value
+    private fun nextYearScoped(entityId: UUID, prefix: String, padWidth: Int, customFormat: String?, fiscalYear: Int? = null): String {
+        val year = fiscalYear ?: Year.now().value
         val seq  = repo.findForUpdateWithYear(entityId, prefix, year)
             ?: CodeSequence(entityId = entityId, prefix = prefix, year = year)
         seq.lastSeq++

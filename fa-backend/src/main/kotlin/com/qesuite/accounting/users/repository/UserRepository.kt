@@ -20,4 +20,5 @@ interface UserRepository : JpaRepository<User, UUID> {
     fun findByEntityIdAndRole(entityId: UUID, role: UserRole, pageable: Pageable): Page<User>
     fun existsByEntityIdAndEmail(entityId: UUID, email: String): Boolean
     fun countByEntityId(entityId: UUID): Long
+    fun countByEntityIdAndStatus(entityId: UUID, status: UserStatus): Long
 }

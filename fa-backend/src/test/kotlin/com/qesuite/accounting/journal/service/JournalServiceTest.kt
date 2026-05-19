@@ -50,7 +50,7 @@ class JournalServiceTest {
         val periodService = mockk<com.qesuite.accounting.ap.service.PeriodService>(relaxed = true)
 
         every { numberConfigService.resolveConfig(any(), any()) } returns PrefixConfig("JE", yearScoped = true)
-        every { codeGeneratorService.nextUniqueForConfig(any(), any(), any()) } returns "JE-2026-0001"
+        every { codeGeneratorService.nextUniqueForConfig(any(), any(), any(), any()) } returns "JE-2026-0001"
 
         journalService = JournalService(
             journalEntryRepository = journalEntryRepository,

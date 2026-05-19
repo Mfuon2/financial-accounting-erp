@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { approvals as approvalsApi } from '@/api/approvals.js'
 import { fmt } from '@/utils/format.js'
 import PageHeader from '@/components/PageHeader.vue'
@@ -18,14 +18,32 @@ onMounted(async () => {
   }
 })
 
+const approvingId = ref(null)
+const rejectingId = ref(null)
+
+function typeLabel(type) {
+  const map = { JOURNAL_ENTRY: 'Journal Entry', INVOICE: 'Invoice', BILL: 'Vendor Bill' }
+  return map[type?.toUpperCase()] ?? type
+}
+function typeBadge(type) {
+  const map = { JOURNAL_ENTRY: 'posted', INVOICE: 'info', BILL: 'submitted' }
+  return map[type?.toUpperCase()] ?? 'draft'
+}
+
 async function approve(item) {
-  await approvalsApi.approve(item.id, { type: item.type.toUpperCase().replace(/ /g, '_') })
-  items.value = items.value.filter(a => a.id !== item.id)
+  approvingId.value = item.id
+  try {
+    await approvalsApi.approve(item.id, { type: item.type.toUpperCase().replace(/ /g, '_') })
+    items.value = items.value.filter(a => a.id !== item.id)
+  } finally { approvingId.value = null }
 }
 
 async function reject(item) {
-  await approvalsApi.reject(item.id, { type: item.type.toUpperCase().replace(/ /g, '_'), reason: 'Rejected' })
-  items.value = items.value.filter(a => a.id !== item.id)
+  rejectingId.value = item.id
+  try {
+    await approvalsApi.reject(item.id, { type: item.type.toUpperCase().replace(/ /g, '_'), reason: 'Rejected' })
+    items.value = items.value.filter(a => a.id !== item.id)
+  } finally { rejectingId.value = null }
 }
 </script>
 
@@ -56,21 +74,22 @@ async function reject(item) {
           <tbody>
             <tr v-for="a in items" :key="a.id">
               <td>
-                <Badge
-                  :status="a.type === 'Journal Entry' ? 'posted' : a.type === 'Payment' ? 'info' : 'draft'"
-                  :dot="false"
-                >{{ a.type }}</Badge>
+                <Badge :status="typeBadge(a.type)" :dot="false">{{ typeLabel(a.type) }}</Badge>
               </td>
-              <td><span class="code-cell link">{{ a.ref }}</span></td>
+              <td><code style="font-size:12px">{{ a.ref }}</code></td>
               <td>{{ a.title }}</td>
-              <td class="num">{{ a.currency }} {{ fmt(a.amount) }}</td>
+              <td class="num mono">{{ a.currency }} {{ fmt(a.amount) }}</td>
               <td><Badge status="outline" :dot="false">{{ a.submittedBy }}</Badge></td>
-              <td>{{ a.waitingFor }}</td>
-              <td>{{ a.submittedAt }}</td>
+              <td style="font-size:12px;color:var(--muted)">{{ a.waitingFor }}</td>
+              <td style="font-size:12px;color:var(--muted)">{{ a.submittedAt }}</td>
               <td>
                 <div style="display:flex;gap:4px">
-                  <Button variant="ghost" size="sm" icon="x" @click="reject(a)">Reject</Button>
-                  <Button variant="primary" size="sm" icon="check" @click="approve(a)">Approve</Button>
+                  <Button variant="ghost" size="sm" icon="x"
+                    :loading="rejectingId === a.id"
+                    @click="reject(a)">Reject</Button>
+                  <Button variant="primary" size="sm" icon="approve"
+                    :loading="approvingId === a.id"
+                    @click="approve(a)">Approve</Button>
                 </div>
               </td>
             </tr>
