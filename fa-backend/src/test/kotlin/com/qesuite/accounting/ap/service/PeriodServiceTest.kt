@@ -115,4 +115,29 @@ class PeriodServiceTest {
             periodService.transitionPeriod(periodId, PeriodStatus.OPEN)
         }
     }
+
+    @Test
+    fun `should reject opening a second period while one is already OPEN for the entity (BUG-25)`() {
+        // Given — a FUTURE period is being transitioned to OPEN, but another period for the
+        // same entity is already OPEN. The single-open-period accounting control must hold:
+        // exactly one period per entity may be OPEN at any time.
+        val periodId = UUID.randomUUID()
+        val periodToOpen = Period(
+            entityId, "FEBRUARY 2024",
+            LocalDate.of(2024, 2, 1), LocalDate.of(2024, 2, 29),
+            PeriodStatus.FUTURE,
+        )
+        every { periodRepository.findById(periodId) } returns Optional.of(periodToOpen)
+        every { periodRepository.existsByEntityIdAndStatus(entityId, PeriodStatus.OPEN) } returns true
+
+        // When/Then
+        val ex = assertThrows<BusinessRuleViolationException> {
+            periodService.transitionPeriod(periodId, PeriodStatus.OPEN)
+        }
+        assertEquals("PERIOD_ALREADY_OPEN", ex.errorCode)
+        assertEquals(422, ex.httpStatus)
+        // The rejected period must not have been mutated or persisted.
+        assertEquals(PeriodStatus.FUTURE, periodToOpen.status)
+        verify(exactly = 0) { periodRepository.save(any()) }
+    }
 }
