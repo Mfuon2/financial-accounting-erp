@@ -120,12 +120,22 @@ verdict **APPROVED end-to-end**). Detail:
   before this fix (January always auto-opened) but exposed by the correct BUG-27 fix. All three were
   corrected and re-verified in the second pass; `Dashboard.vue`'s fallback copy was corrected to
   match the `useActivePeriod.js` fix.
-- BUG-25 (multiple concurrent `OPEN` periods) was **not** part of this session's re-verification
-  scope — still carried forward as unverified against current `HEAD` below.
+
+**RESOLVED — BUG-25 (single-open-period enforcement), verified by actually running it, not
+read-through:** In its first review pass, the Financial Systems Architect wrote and ran temporary
+MockK tests directly against the real `PeriodService` (not against mocks of the rule itself) and
+confirmed: attempting to transition a second period to `OPEN` while one is already `OPEN` for the
+same entity throws `BusinessRuleViolationException` with `errorCode=PERIOD_ALREADY_OPEN`,
+`httpStatus=422`, and leaves the target period unmutated — surefire reported `Tests run: 3,
+Failures: 0`. This confirms the single-open-period control genuinely works today, independent of and
+prior to the BUG-24/27/34 fixes above. **Caveat:** the verification tests were temporary and were
+deleted after the run (per the reviewer's own report) — the permanent `PeriodServiceTest.kt` suite
+(6/6 passing after this session's fixes) has not been confirmed to include an equivalent *permanent*
+regression test for this specific scenario. Treat the *behavior* as verified-correct today, but log
+"add a permanent `PERIOD_ALREADY_OPEN` regression test to `PeriodServiceTest.kt`" as a small
+follow-up so a future change can't silently regress this without the suite catching it.
 
 **Critical (from BUG_REPORT_V2, still unverified against current code):**
-- Periods module: system allowed multiple concurrent `OPEN` periods, violating the single-open-period
-  accounting control (BUG-25) — not re-tested this session, do not assume fixed.
 - Journal Entries: critical issue logged as BUG-29 (detail not preserved in this summary — see
   `git show HEAD:BUG_REPORT_V2.md` for full text).
 - Comparative Trial Balance: critical issue BUG-33, consistent with the confirmed stub gap below.
@@ -194,15 +204,17 @@ runs, not caused by this session's work, confirmed present before and after):**
 - Tax computed at the effective rate for the transaction date, not the current date (supports rate
   changes like 14%→16% VAT without corrupting history).
 - Single-open-period control is the intended design (per BUG-25's severity as *critical*) — multiple
-  concurrently open periods is a defect, not a feature, and must be re-verified/fixed under
-  Financial Systems Architect review before being marked resolved.
+  concurrently open periods is a defect, not a feature. Confirmed genuinely enforced today, verified
+  by actually running it under Financial Systems Architect review (see Known Issues); recommend
+  adding a permanent regression test to lock it in, since the verification test used was temporary.
 
 ## Open Risks / Blockers
 
 - Fiscal-year default/context-switch/switcher-UI bugs (BUG-24/27/34) are now fixed and verified (see
-  Known Issues) — **removed** from this list. BUG-25 (multiple concurrent `OPEN` periods) remains
-  unverified against current `HEAD` and stays on this list: until re-confirmed, treat that specific
-  control as **not yet trustworthy** for production use.
+  Known Issues) — **removed** from this list. BUG-25 (multiple concurrent `OPEN` periods) is also
+  **removed** from this list — verified genuinely enforced by an actual (if temporary) test run; the
+  residual risk is narrower than "is it broken" — it's "no permanent regression test locks this in
+  yet" (see Known Issues follow-up item).
 - Synchronous batch operations (depreciation, FX revaluation) will not scale and block the request
   thread — a real constraint once transaction volume grows, tracked for Phase 0/3.
 - M-Pesa callback handling uses sentinel UUIDs in place of a real session table — **not production
@@ -214,14 +226,16 @@ runs, not caused by this session's work, confirmed present before and after):**
 
 ## Outstanding Reviews
 
-- **Period management (BUG-24/27/34) and ApiKeys wiring: both now have recorded Engineering +
+- **Period management (BUG-24/25/27/34) and ApiKeys wiring: both now have recorded Engineering +
   Accounting sign-off**, per AGENTS.md's Definition of Completion — this is the first module actually
   taken through the full governance gate end to end (two Financial Systems Architect review passes:
-  first pass found 3 real defects and did not approve; second pass, after fixes, independently
-  re-derived every claim from current file contents, re-ran `mvn clean test` (JDK 21) and
-  `npm run build`, and gave final verdict **APPROVED end-to-end** for both).
-- BUG-25 (multiple concurrent `OPEN` periods) still has no Financial Systems Architect review against
-  current `HEAD` — owed as a follow-up, not covered by this session's period-management approval.
+  first pass found 3 real defects and did not approve, but *also* independently verified BUG-25's
+  single-open-period enforcement by running a real test against it; second pass, after fixes,
+  independently re-derived every claim from current file contents, re-ran `mvn clean test` (JDK 21)
+  and `npm run build`, and gave final verdict **APPROVED end-to-end** for both).
+- Follow-up owed (small, non-blocking): add a permanent `PERIOD_ALREADY_OPEN` regression test to
+  `PeriodServiceTest.kt` — the behavior is verified correct today, but the test that proved it was
+  temporary and was deleted after the review run.
 - No formal Engineering or Accounting sign-off exists yet for any *other* module under the new
   governance model (the product was built before this framework was adopted) — treat those modules as
   **provisionally accepted** (working, documented, IFRS-cited) but not formally gated per AGENTS.md
@@ -229,11 +243,12 @@ runs, not caused by this session's work, confirmed present before and after):**
 
 ## Next Recommended Action
 
-Uncommitted-work reconciliation and the BUG-24/27/34 period-management fixes are done (see above).
-Real remaining Phase 0 work:
+Uncommitted-work reconciliation and the BUG-24/25/27/34 period-management fixes are done and
+verified (see above). Real remaining Phase 0 work:
 
-1. Re-verify BUG-25 (multiple concurrent `OPEN` periods) against current `HEAD` — still unverified,
-   still the highest-priority remaining accounting-control item.
+1. Add a permanent `PERIOD_ALREADY_OPEN` regression test to `PeriodServiceTest.kt` — quick, closes
+   the one residual gap from the BUG-25 verification (behavior confirmed correct, but only by a
+   temporary test).
 2. Close the confirmed Tier 1 gaps: missing `PUT` endpoints for FX currencies, exchange rates, tax
    codes, and fixed assets; comparative trial balance implementation; organization RBAC fix for
    entity-scoped `SYSTEM_ADMIN`.

@@ -29,11 +29,14 @@ work begins.
   all committed to `main`; see MEMORY.md "Modules In Progress — RESOLVED" for commit references.
 - [DONE] Re-verify and fix fiscal-year generation defaults (BUG-24), fiscal-year context switching
   (BUG-27), fiscal-year switcher UI (BUG-34) — fixed and Engineering + Accounting approved
-  (two-pass Financial Systems Architect review); see MEMORY.md "Known Issues" for detail. **BUG-25**
-  (single-open-period enforcement) is **not** done — still unverified against current `HEAD`, remains
-  open below.
-- Re-verify and fix BUG-25 — system allowed multiple concurrent `OPEN` periods, violating the
-  single-open-period accounting control; not yet re-tested this session.
+  (two-pass Financial Systems Architect review); see MEMORY.md "Known Issues" for detail.
+- [DONE] BUG-25 (single-open-period enforcement) — verified genuinely correct today by an actual test
+  run against the real `PeriodService` (not read-through), per the Financial Systems Architect's first
+  review pass. Small follow-up remains (not blocking): the verification test was temporary and was
+  deleted after the run, so add a permanent `PERIOD_ALREADY_OPEN` regression test to
+  `PeriodServiceTest.kt` — see item 1 below.
+- Add a permanent `PERIOD_ALREADY_OPEN` regression test to `PeriodServiceTest.kt` (closes the one
+  residual gap from the BUG-25 verification).
 - Close the confirmed Tier 1 API gaps: `PUT` endpoints for FX currencies, exchange rates, tax codes,
   fixed assets; comparative trial balance implementation; organization RBAC fix for entity-scoped
   `SYSTEM_ADMIN`.
@@ -189,9 +192,9 @@ transactional guarantees.
 
 ## Immediate Next Actions (Top of Backlog)
 
-1. Agent 2 (Accounting) re-verification of BUG-25 (single-open-period enforcement) — the one
-   accounting-control defect from the original bug list not yet re-tested; fiscal-year-default
-   (BUG-24/27/34) is done, see MEMORY.md.
+1. Add a permanent `PERIOD_ALREADY_OPEN` regression test to `PeriodServiceTest.kt` — BUG-25 itself is
+   verified correct (see MEMORY.md), this just locks it in with a permanent test instead of the
+   temporary one used to verify it. Quick, small.
 2. Close the confirmed Tier 1 API gaps (missing `PUT` endpoints, comparative trial balance,
    organization RBAC fix) — next largest block of Phase 0 work.
 3. Delivery Manager to break down the remaining Phase 0 items (Tier 2/3 gaps, the three
