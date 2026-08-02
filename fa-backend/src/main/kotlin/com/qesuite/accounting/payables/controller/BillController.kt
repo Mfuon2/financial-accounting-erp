@@ -32,6 +32,7 @@ class BillController(private val billService: BillService) {
     @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CONTROLLER_CFO','SYSTEM_ADMIN','DATA_ENTRY')")
     @Operation(summary = "Create a vendor bill (DRAFT) — returns warnings on potential duplicate")
     fun createBill(@Valid @RequestBody request: CreateBillRequest): ApiResponse<Bill> {
+        SecurityUtils.requireOwnEntity(request.entityId)
         val createdBy = SecurityUtils.currentUser().userId
         val result = billService.createBill(request, createdBy)
         return ApiResponse(success = true, data = result.bill, warnings = result.warnings)
@@ -45,14 +46,19 @@ class BillController(private val billService: BillService) {
         @RequestParam(required = false) status: BillStatus?,
         @RequestParam(defaultValue = "0")  page: Int,
         @RequestParam(defaultValue = "20") size: Int,
-    ): ApiResponse<Page<Bill>> =
-        ApiResponse.success(billService.findByEntity(entityId, status, page, size))
+    ): ApiResponse<Page<Bill>> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(billService.findByEntity(entityId, status, page, size))
+    }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CONTROLLER_CFO','AUDITOR','SYSTEM_ADMIN','DATA_ENTRY')")
     @Operation(summary = "Get a single vendor bill by ID")
-    fun getBill(@PathVariable id: UUID): ApiResponse<Bill> =
-        ApiResponse.success(billService.findById(id))
+    fun getBill(@PathVariable id: UUID): ApiResponse<Bill> {
+        val bill = billService.findById(id)
+        SecurityUtils.requireOwnEntity(bill.entityId)
+        return ApiResponse.success(bill)
+    }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CONTROLLER_CFO','SYSTEM_ADMIN','DATA_ENTRY')")
@@ -61,6 +67,7 @@ class BillController(private val billService: BillService) {
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateBillRequest,
     ): ApiResponse<Bill> {
+        SecurityUtils.requireOwnEntity(billService.findById(id).entityId)
         val modifiedBy = SecurityUtils.currentUser().userId
         return ApiResponse.success(billService.updateBill(id, request, modifiedBy))
     }
@@ -68,8 +75,10 @@ class BillController(private val billService: BillService) {
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAnyRole('SENIOR_ACCOUNTANT','CONTROLLER_CFO','SYSTEM_ADMIN')")
     @Operation(summary = "Approve a DRAFT bill — posts AP journal entry to GL")
-    fun approveBill(@PathVariable id: UUID): ApiResponse<Bill> =
-        ApiResponse.success(billService.approveBill(id))
+    fun approveBill(@PathVariable id: UUID): ApiResponse<Bill> {
+        SecurityUtils.requireOwnEntity(billService.findById(id).entityId)
+        return ApiResponse.success(billService.approveBill(id))
+    }
 
     @PostMapping("/{id}/void")
     @PreAuthorize("hasAnyRole('SENIOR_ACCOUNTANT','CONTROLLER_CFO','SYSTEM_ADMIN')")
@@ -77,8 +86,10 @@ class BillController(private val billService: BillService) {
     fun voidBill(
         @PathVariable id: UUID,
         @RequestParam(required = false) reason: String?,
-    ): ApiResponse<Bill> =
-        ApiResponse.success(billService.voidBill(id, reason))
+    ): ApiResponse<Bill> {
+        SecurityUtils.requireOwnEntity(billService.findById(id).entityId)
+        return ApiResponse.success(billService.voidBill(id, reason))
+    }
 
     @PostMapping("/{id}/debit-note")
     @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CONTROLLER_CFO','SYSTEM_ADMIN')")
@@ -87,6 +98,7 @@ class BillController(private val billService: BillService) {
         @PathVariable id: UUID,
         @Valid @RequestBody request: CreateDebitNoteRequest,
     ): ApiResponse<Bill> {
+        SecurityUtils.requireOwnEntity(billService.findById(id).entityId)
         val createdBy = SecurityUtils.currentUser().userId
         return ApiResponse.success(billService.createDebitNote(id, request, createdBy))
     }
@@ -98,6 +110,7 @@ class BillController(private val billService: BillService) {
         @PathVariable id: UUID,
         @Valid @RequestBody request: RecordBillPaymentRequest,
     ): ApiResponse<BillPayment> {
+        SecurityUtils.requireOwnEntity(billService.findById(id).entityId)
         val createdBy = SecurityUtils.currentUser().userId
         return ApiResponse.success(billService.recordPayment(id, request, createdBy))
     }
@@ -105,14 +118,17 @@ class BillController(private val billService: BillService) {
     @GetMapping("/{id}/payments")
     @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CONTROLLER_CFO','AUDITOR','SYSTEM_ADMIN')")
     @Operation(summary = "List all payments for a bill")
-    fun listPayments(@PathVariable id: UUID): ApiResponse<List<BillPayment>> =
-        ApiResponse.success(billService.getPayments(id))
+    fun listPayments(@PathVariable id: UUID): ApiResponse<List<BillPayment>> {
+        SecurityUtils.requireOwnEntity(billService.findById(id).entityId)
+        return ApiResponse.success(billService.getPayments(id))
+    }
 
     @PostMapping("/payment-run")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('SENIOR_ACCOUNTANT','CONTROLLER_CFO','SYSTEM_ADMIN')")
     @Operation(summary = "Process a vendor payment run — pays multiple bills in one consolidated journal entry")
     fun processPaymentRun(@Valid @RequestBody request: PaymentRunRequest): ApiResponse<PaymentRun> {
+        SecurityUtils.requireOwnEntity(request.entityId)
         val createdBy = SecurityUtils.currentUser().userId
         return ApiResponse.success(billService.processPaymentRun(request, createdBy))
     }
@@ -120,12 +136,16 @@ class BillController(private val billService: BillService) {
     @GetMapping("/payment-runs")
     @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CONTROLLER_CFO','AUDITOR','SYSTEM_ADMIN')")
     @Operation(summary = "List payment runs for an entity")
-    fun listPaymentRuns(@RequestParam entityId: UUID): ApiResponse<List<PaymentRun>> =
-        ApiResponse.success(billService.listPaymentRuns(entityId))
+    fun listPaymentRuns(@RequestParam entityId: UUID): ApiResponse<List<PaymentRun>> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(billService.listPaymentRuns(entityId))
+    }
 
     @GetMapping("/ageing")
     @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CONTROLLER_CFO','AUDITOR','SYSTEM_ADMIN')")
     @Operation(summary = "AP ageing report — outstanding bills bucketed by days overdue")
-    fun getApAgeing(@RequestParam entityId: UUID): ApiResponse<ApAgeingReport> =
-        ApiResponse.success(billService.getApAgeing(entityId))
+    fun getApAgeing(@RequestParam entityId: UUID): ApiResponse<ApAgeingReport> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(billService.getApAgeing(entityId))
+    }
 }

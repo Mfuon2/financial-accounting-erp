@@ -11,6 +11,7 @@ import com.qesuite.accounting.invoicing.service.InvoiceService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -52,8 +53,10 @@ class InvoiceController(
     )
     fun createDraft(
         @Valid @RequestBody command: CreateInvoiceCommand
-    ): ApiResponse<Invoice> =
-        ApiResponse.success(invoiceService.createDraft(command))
+    ): ApiResponse<Invoice> {
+        SecurityUtils.requireOwnEntity(command.entityId)
+        return ApiResponse.success(invoiceService.createDraft(command))
+    }
 
     @GetMapping
     @Operation(
@@ -72,6 +75,7 @@ class InvoiceController(
         @Parameter(description = "End of issue-date range (ISO 8601)") toDate: LocalDate?,
         @PageableDefault(size = 50) pageable: Pageable
     ): ApiResponse<PagedResponse<Invoice>> {
+        SecurityUtils.requireOwnEntity(entityId)
         val page = invoiceService.findByEntity(
             entityId = entityId,
             customerId = customerId,
@@ -87,8 +91,11 @@ class InvoiceController(
     @Operation(summary = "Retrieve an invoice by ID", description = "Returns the full invoice including all lines.")
     fun findById(
         @PathVariable @Parameter(description = "Invoice UUID") id: UUID
-    ): ApiResponse<Invoice> =
-        ApiResponse.success(invoiceService.findById(id))
+    ): ApiResponse<Invoice> {
+        val invoice = invoiceService.findById(id)
+        SecurityUtils.requireOwnEntity(invoice.entityId)
+        return ApiResponse.success(invoice)
+    }
 
     @PostMapping("/{id}/approve")
     @Operation(
@@ -97,8 +104,10 @@ class InvoiceController(
     )
     fun approve(
         @PathVariable @Parameter(description = "Invoice UUID") id: UUID
-    ): ApiResponse<Invoice> =
-        ApiResponse.success(invoiceService.approve(id))
+    ): ApiResponse<Invoice> {
+        SecurityUtils.requireOwnEntity(invoiceService.findById(id).entityId)
+        return ApiResponse.success(invoiceService.approve(id))
+    }
 
     @PostMapping("/{id}/void")
     @Operation(
@@ -108,8 +117,10 @@ class InvoiceController(
     fun void(
         @PathVariable @Parameter(description = "Invoice UUID") id: UUID,
         @Valid @RequestBody command: VoidInvoiceCommand
-    ): ApiResponse<Invoice> =
-        ApiResponse.success(invoiceService.void(id, command.reason))
+    ): ApiResponse<Invoice> {
+        SecurityUtils.requireOwnEntity(invoiceService.findById(id).entityId)
+        return ApiResponse.success(invoiceService.void(id, command.reason))
+    }
 
     @PostMapping("/{id}/credit-note")
     @Operation(
@@ -119,8 +130,10 @@ class InvoiceController(
     fun createCreditNote(
         @PathVariable @Parameter(description = "Original invoice UUID") id: UUID,
         @Valid @RequestBody command: CreateCreditNoteCommand
-    ): ApiResponse<Invoice> =
-        ApiResponse.success(invoiceService.createCreditNote(id, command))
+    ): ApiResponse<Invoice> {
+        SecurityUtils.requireOwnEntity(invoiceService.findById(id).entityId)
+        return ApiResponse.success(invoiceService.createCreditNote(id, command))
+    }
 
     @PostMapping("/{id}/payment")
     @Operation(
@@ -130,8 +143,10 @@ class InvoiceController(
     fun applyPayment(
         @PathVariable @Parameter(description = "Invoice UUID") id: UUID,
         @Valid @RequestBody command: ApplyInvoicePaymentCommand
-    ): ApiResponse<Invoice> =
-        ApiResponse.success(invoiceService.applyPayment(id, command.paymentAmount))
+    ): ApiResponse<Invoice> {
+        SecurityUtils.requireOwnEntity(invoiceService.findById(id).entityId)
+        return ApiResponse.success(invoiceService.applyPayment(id, command.paymentAmount))
+    }
 
     @GetMapping("/ar-ageing")
     @Operation(
@@ -143,6 +158,8 @@ class InvoiceController(
         @RequestParam
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
         @Parameter(description = "Report as-of date (ISO 8601)", required = true) asOfDate: LocalDate
-    ): ApiResponse<ArAgeingResponse> =
-        ApiResponse.success(invoiceService.arAgeing(entityId, asOfDate))
+    ): ApiResponse<ArAgeingResponse> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(invoiceService.arAgeing(entityId, asOfDate))
+    }
 }

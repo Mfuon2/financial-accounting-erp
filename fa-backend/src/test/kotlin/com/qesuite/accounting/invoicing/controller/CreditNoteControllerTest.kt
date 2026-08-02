@@ -6,13 +6,13 @@ import com.qesuite.accounting.invoicing.domain.Invoice
 import com.qesuite.accounting.invoicing.domain.InvoiceStatus
 import com.qesuite.accounting.invoicing.service.InvoiceService
 import com.qesuite.accounting.shared.security.JwtService
+import com.qesuite.accounting.shared.security.mockUserContext
 import io.mockk.every
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
-import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import java.math.BigDecimal
@@ -39,7 +39,6 @@ class CreditNoteControllerTest {
     private lateinit var invoiceService: InvoiceService
 
     @Test
-    @WithMockUser
     fun `should list credit notes for an entity with real data in the response`() {
         // Given
         val entityId = UUID.randomUUID()
@@ -65,8 +64,10 @@ class CreditNoteControllerTest {
             invoiceService.findCreditNotesByEntity(entityId, pageable)
         } returns PageImpl(listOf(creditNote), pageable, 1)
 
-        // When/Then
+        // When/Then — authenticated as a user of the SAME entity (SecurityUtils.requireOwnEntity
+        // guard added by the IDOR sweep requires a real UserContext principal).
         mockMvc.get("/api/v1/credit-notes") {
+            with(mockUserContext(entityId))
             param("entityId", entityId.toString())
         }.andExpect {
             status { isOk() }

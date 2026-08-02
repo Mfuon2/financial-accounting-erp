@@ -5,6 +5,7 @@ import com.qesuite.accounting.receipts.service.ReceiptService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -56,6 +57,7 @@ class ReceiptController(
     fun generateReceipt(
         @Valid @RequestBody request: GenerateReceiptRequest
     ): ResponseEntity<ApiResponse<Receipt>> {
+        SecurityUtils.requireOwnEntity(request.entityId)
         val receipt = receiptService.generateReceipt(
             paymentId     = request.paymentId,
             entityId      = request.entityId,
@@ -80,6 +82,7 @@ class ReceiptController(
         entityId: UUID,
         @PageableDefault(size = 20) pageable: Pageable,
     ): ResponseEntity<ApiResponse<PagedResponse<Receipt>>> {
+        SecurityUtils.requireOwnEntity(entityId)
         val page = receiptService.findByEntity(entityId, pageable)
         return ResponseEntity.ok(ApiResponse.success(page.toPagedResponse { it }))
     }
@@ -93,8 +96,11 @@ class ReceiptController(
     @PreAuthorize("hasAnyRole('DATA_ENTRY','ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','AUDITOR','SYSTEM_ADMIN')")
     fun findById(
         @PathVariable id: UUID,
-    ): ResponseEntity<ApiResponse<Receipt>> =
-        ResponseEntity.ok(ApiResponse.success(receiptService.findById(id)))
+    ): ResponseEntity<ApiResponse<Receipt>> {
+        val receipt = receiptService.findById(id)
+        SecurityUtils.requireOwnEntity(receipt.entityId)
+        return ResponseEntity.ok(ApiResponse.success(receipt))
+    }
 
     // -----------------------------------------------------------------------
     // ISSUE  (POST → 201 CREATED)
@@ -110,6 +116,7 @@ class ReceiptController(
     fun issueReceipt(
         @PathVariable id: UUID,
     ): ResponseEntity<ApiResponse<Receipt>> {
+        SecurityUtils.requireOwnEntity(receiptService.findById(id).entityId)
         val receipt = receiptService.issueReceipt(id)
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(receipt))
     }
@@ -128,8 +135,10 @@ class ReceiptController(
     fun voidReceipt(
         @PathVariable id: UUID,
         @Valid @RequestBody request: VoidReceiptRequest,
-    ): ResponseEntity<ApiResponse<Receipt>> =
-        ResponseEntity.ok(ApiResponse.success(receiptService.voidReceipt(id, request.reason)))
+    ): ResponseEntity<ApiResponse<Receipt>> {
+        SecurityUtils.requireOwnEntity(receiptService.findById(id).entityId)
+        return ResponseEntity.ok(ApiResponse.success(receiptService.voidReceipt(id, request.reason)))
+    }
 
     // -----------------------------------------------------------------------
     // GET BY PAYMENT
@@ -143,8 +152,11 @@ class ReceiptController(
     @PreAuthorize("hasAnyRole('DATA_ENTRY','ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','AUDITOR','SYSTEM_ADMIN')")
     fun findByPayment(
         @PathVariable paymentId: UUID,
-    ): ResponseEntity<ApiResponse<Receipt>> =
-        ResponseEntity.ok(ApiResponse.success(receiptService.findByPayment(paymentId)))
+    ): ResponseEntity<ApiResponse<Receipt>> {
+        val receipt = receiptService.findByPayment(paymentId)
+        SecurityUtils.requireOwnEntity(receipt.entityId)
+        return ResponseEntity.ok(ApiResponse.success(receipt))
+    }
 }
 
 // ---------------------------------------------------------------------------

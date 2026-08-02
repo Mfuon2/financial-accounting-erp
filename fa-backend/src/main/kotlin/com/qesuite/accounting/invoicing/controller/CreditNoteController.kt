@@ -5,6 +5,7 @@ import com.qesuite.accounting.invoicing.service.InvoiceService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -52,6 +53,7 @@ class CreditNoteController(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID,
         @PageableDefault(size = 50) pageable: Pageable
     ): ApiResponse<PagedResponse<Invoice>> {
+        SecurityUtils.requireOwnEntity(entityId)
         val page = invoiceService.findCreditNotesByEntity(entityId, pageable)
         return ApiResponse.success(page.toPagedResponse { it })
     }

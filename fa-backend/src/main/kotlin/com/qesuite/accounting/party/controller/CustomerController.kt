@@ -7,6 +7,7 @@ import com.qesuite.accounting.party.service.CustomerService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -42,8 +43,10 @@ class CustomerController(
     )
     fun create(
         @Valid @RequestBody command: CreateCustomerCommand
-    ): ApiResponse<Customer> =
-        ApiResponse.success(customerService.create(command))
+    ): ApiResponse<Customer> {
+        SecurityUtils.requireOwnEntity(command.entityId)
+        return ApiResponse.success(customerService.create(command))
+    }
 
     @GetMapping
     @Operation(
@@ -56,6 +59,7 @@ class CustomerController(
         @Parameter(description = "When true, returns only active customers") activeOnly: Boolean,
         @PageableDefault(size = 50) pageable: Pageable
     ): ApiResponse<PagedResponse<Customer>> {
+        SecurityUtils.requireOwnEntity(entityId)
         val page = if (activeOnly) {
             customerService.findByEntityActive(entityId, pageable)
         } else {
@@ -68,8 +72,11 @@ class CustomerController(
     @Operation(summary = "Retrieve a customer by ID")
     fun findById(
         @PathVariable @Parameter(description = "Customer UUID") id: UUID
-    ): ApiResponse<Customer> =
-        ApiResponse.success(customerService.findById(id))
+    ): ApiResponse<Customer> {
+        val customer = customerService.findById(id)
+        SecurityUtils.requireOwnEntity(customer.entityId)
+        return ApiResponse.success(customer)
+    }
 
     @PutMapping("/{id}")
     @Operation(
@@ -79,8 +86,10 @@ class CustomerController(
     fun update(
         @PathVariable @Parameter(description = "Customer UUID") id: UUID,
         @Valid @RequestBody command: UpdateCustomerCommand
-    ): ApiResponse<Customer> =
-        ApiResponse.success(customerService.update(id, command))
+    ): ApiResponse<Customer> {
+        SecurityUtils.requireOwnEntity(customerService.findById(id).entityId)
+        return ApiResponse.success(customerService.update(id, command))
+    }
 
     @PostMapping("/{id}/deactivate")
     @Operation(
@@ -90,8 +99,10 @@ class CustomerController(
     fun deactivate(
         @PathVariable @Parameter(description = "Customer UUID") id: UUID,
         @Valid @RequestBody command: DeactivateCustomerCommand
-    ): ApiResponse<Customer> =
-        ApiResponse.success(customerService.deactivate(id, command.reason, command.deactivatedBy))
+    ): ApiResponse<Customer> {
+        SecurityUtils.requireOwnEntity(customerService.findById(id).entityId)
+        return ApiResponse.success(customerService.deactivate(id, command.reason, command.deactivatedBy))
+    }
 }
 
 data class DeactivateCustomerCommand(

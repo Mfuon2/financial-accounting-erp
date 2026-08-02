@@ -8,6 +8,7 @@ import com.qesuite.accounting.party.service.SupplierService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -43,8 +44,10 @@ class SupplierController(
     )
     fun create(
         @Valid @RequestBody command: CreateSupplierCommand
-    ): ApiResponse<Supplier> =
-        ApiResponse.success(supplierService.create(command))
+    ): ApiResponse<Supplier> {
+        SecurityUtils.requireOwnEntity(command.entityId)
+        return ApiResponse.success(supplierService.create(command))
+    }
 
     @GetMapping
     @Operation(
@@ -57,6 +60,7 @@ class SupplierController(
         @Parameter(description = "When true, returns only active suppliers") activeOnly: Boolean,
         @PageableDefault(size = 50) pageable: Pageable
     ): ApiResponse<PagedResponse<Supplier>> {
+        SecurityUtils.requireOwnEntity(entityId)
         val page = if (activeOnly) {
             supplierService.findByEntityActive(entityId, pageable)
         } else {
@@ -69,8 +73,11 @@ class SupplierController(
     @Operation(summary = "Retrieve a supplier by ID")
     fun findById(
         @PathVariable @Parameter(description = "Supplier UUID") id: UUID
-    ): ApiResponse<Supplier> =
-        ApiResponse.success(supplierService.findById(id))
+    ): ApiResponse<Supplier> {
+        val supplier = supplierService.findById(id)
+        SecurityUtils.requireOwnEntity(supplier.entityId)
+        return ApiResponse.success(supplier)
+    }
 
     @PutMapping("/{id}")
     @Operation(
@@ -80,8 +87,10 @@ class SupplierController(
     fun update(
         @PathVariable @Parameter(description = "Supplier UUID") id: UUID,
         @Valid @RequestBody command: UpdateSupplierCommand
-    ): ApiResponse<Supplier> =
-        ApiResponse.success(supplierService.update(id, command))
+    ): ApiResponse<Supplier> {
+        SecurityUtils.requireOwnEntity(supplierService.findById(id).entityId)
+        return ApiResponse.success(supplierService.update(id, command))
+    }
 
     @PostMapping("/{id}/deactivate")
     @Operation(
@@ -91,8 +100,10 @@ class SupplierController(
     fun deactivate(
         @PathVariable @Parameter(description = "Supplier UUID") id: UUID,
         @Valid @RequestBody command: DeactivateSupplierCommand
-    ): ApiResponse<Supplier> =
-        ApiResponse.success(supplierService.deactivate(id, command.reason, command.deactivatedBy))
+    ): ApiResponse<Supplier> {
+        SecurityUtils.requireOwnEntity(supplierService.findById(id).entityId)
+        return ApiResponse.success(supplierService.deactivate(id, command.reason, command.deactivatedBy))
+    }
 
     @GetMapping("/{id}/statement")
     @Operation(
@@ -101,8 +112,10 @@ class SupplierController(
     )
     fun getStatement(
         @PathVariable @Parameter(description = "Supplier UUID") id: UUID
-    ): ApiResponse<SupplierStatementResponse> =
-        ApiResponse.success(supplierService.getStatement(id))
+    ): ApiResponse<SupplierStatementResponse> {
+        SecurityUtils.requireOwnEntity(supplierService.findById(id).entityId)
+        return ApiResponse.success(supplierService.getStatement(id))
+    }
 }
 
 data class DeactivateSupplierCommand(

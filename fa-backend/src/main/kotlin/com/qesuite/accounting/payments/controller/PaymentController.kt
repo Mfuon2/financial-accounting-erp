@@ -14,6 +14,7 @@ import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
 import com.qesuite.accounting.shared.exceptions.ValidationException
 import com.qesuite.accounting.shared.idempotency.service.IdempotencyResult
+import com.qesuite.accounting.shared.security.SecurityUtils
 import com.qesuite.accounting.shared.idempotency.service.IdempotencyService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -74,6 +75,7 @@ class PaymentController(
         @Parameter(description = "Client-generated UUID for idempotent retry safety")
         idempotencyKey: String
     ): ResponseEntity<ApiResponse<PaymentResponse>> {
+        SecurityUtils.requireOwnEntity(command.entityId)
         // Idempotency guard
         val idem = idempotencyService.checkAndStore(idempotencyKey, command.entityId)
         if (idem is IdempotencyResult.DUPLICATE) {
@@ -105,6 +107,7 @@ class PaymentController(
         @RequestParam(required = false) customerId: UUID?,
         pageable: Pageable
     ): ResponseEntity<ApiResponse<PagedResponse<PaymentResponse>>> {
+        SecurityUtils.requireOwnEntity(entityId)
         val page = when {
             customerId != null -> paymentService.findByCustomer(entityId, customerId, pageable)
             status != null -> paymentService.findByEntityAndStatus(entityId, status, pageable)
@@ -117,7 +120,9 @@ class PaymentController(
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('DATA_ENTRY','ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','AUDITOR','SYSTEM_ADMIN')")
     fun getById(@PathVariable id: UUID): ResponseEntity<ApiResponse<PaymentResponse>> {
-        return ResponseEntity.ok(ApiResponse.success(paymentService.findById(id).toResponse()))
+        val payment = paymentService.findById(id)
+        SecurityUtils.requireOwnEntity(payment.entityId)
+        return ResponseEntity.ok(ApiResponse.success(payment.toResponse()))
     }
 
     // -----------------------------------------------------------------------
@@ -131,6 +136,7 @@ class PaymentController(
         @PathVariable id: UUID,
         @Valid @RequestBody request: PaymentMatchRequest
     ): ResponseEntity<ApiResponse<PaymentResponse>> {
+        SecurityUtils.requireOwnEntity(paymentService.findById(id).entityId)
         val payment = paymentService.matchToInvoice(id, request.invoiceId, request.matchedAmount)
         return ResponseEntity.ok(ApiResponse.success(payment.toResponse()))
     }
@@ -143,6 +149,7 @@ class PaymentController(
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAnyRole('SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
     fun approvePayment(@PathVariable id: UUID): ResponseEntity<ApiResponse<PaymentResponse>> {
+        SecurityUtils.requireOwnEntity(paymentService.findById(id).entityId)
         val payment = paymentService.approvePayment(id)
         return ResponseEntity.ok(ApiResponse.success(payment.toResponse()))
     }
@@ -155,6 +162,7 @@ class PaymentController(
     @PostMapping("/{id}/post")
     @PreAuthorize("hasAnyRole('SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
     fun postPayment(@PathVariable id: UUID): ResponseEntity<ApiResponse<PaymentResponse>> {
+        SecurityUtils.requireOwnEntity(paymentService.findById(id).entityId)
         val payment = paymentService.postPayment(id)
         return ResponseEntity.ok(ApiResponse.success(payment.toResponse()))
     }
@@ -170,6 +178,7 @@ class PaymentController(
         @PathVariable id: UUID,
         @Valid @RequestBody request: ReversePaymentRequest
     ): ResponseEntity<ApiResponse<PaymentResponse>> {
+        SecurityUtils.requireOwnEntity(paymentService.findById(id).entityId)
         val payment = paymentService.reversePayment(id, request.reason)
         return ResponseEntity.ok(ApiResponse.success(payment.toResponse()))
     }
