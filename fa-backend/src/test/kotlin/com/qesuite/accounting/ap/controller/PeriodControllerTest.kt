@@ -10,9 +10,11 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
+import org.springframework.http.MediaType
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.test.web.servlet.MockMvc
@@ -24,6 +26,9 @@ class PeriodControllerTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var objectMapper: ObjectMapper
 
     @MockkBean
     private lateinit var jwtService: JwtService
@@ -37,15 +42,18 @@ class PeriodControllerTest {
     @Test
     @WithMockUser
     fun `should generate fiscal year`() {
-        // Given
+        // Given — the controller's real contract is a JSON body (GenerateFiscalYearRequest
+        // with entityId/fiscalYear fields), not request params, and not "startYear".
         val entityId = UUID.randomUUID()
         every { periodService.generateFiscalYear(entityId, 2024) } just runs
 
         // When/Then
         mockMvc.post("/api/v1/periods/generate-fiscal-year") {
             with(csrf())
-            param("entityId", entityId.toString())
-            param("startYear", "2024")
+            contentType = MediaType.APPLICATION_JSON
+            content = objectMapper.writeValueAsString(
+                mapOf("entityId" to entityId.toString(), "fiscalYear" to 2024)
+            )
         }.andExpect {
             status { isCreated() }
             jsonPath("$.success") { value(true) }

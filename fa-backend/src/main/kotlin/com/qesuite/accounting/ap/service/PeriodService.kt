@@ -7,6 +7,7 @@ import com.qesuite.accounting.shared.audit.annotation.AuditResourceId
 import com.qesuite.accounting.shared.audit.annotation.Auditable
 import com.qesuite.accounting.shared.audit.domain.AuditAction
 import com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException
+import com.qesuite.accounting.shared.exceptions.ConflictException
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
 import com.qesuite.accounting.shared.security.SecurityUtils
@@ -25,10 +26,12 @@ class PeriodService(private val periodRepository: PeriodRepository) {
      */
     @Transactional
     fun generateFiscalYear(entityId: UUID, startYear: Int) {
-        // Guard: prevent duplicate fiscal year generation
+        // Guard: prevent duplicate fiscal year generation. This is a conflict with existing
+        // data (HTTP 409), not a malformed-input error (HTTP 400) — the request itself is
+        // perfectly valid, it just can't be applied because the resource already exists.
         val firstMonthName = "${java.time.Month.JANUARY} $startYear"
         if (periodRepository.existsByEntityIdAndPeriodName(entityId, firstMonthName)) {
-            throw ValidationException(
+            throw ConflictException(
                 errorCode = "FISCAL_YEAR_ALREADY_EXISTS",
                 message = "Fiscal year $startYear has already been generated for this entity. " +
                     "Use the period transition endpoints to manage existing periods.",
