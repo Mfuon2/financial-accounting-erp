@@ -42,7 +42,7 @@ period starts as **FUTURE**; none is auto-opened. Callers must explicitly transi
 the period they want to start using to **OPEN** via the transition endpoint. Transitions
 are validated — illegal jumps (e.g., OPEN → CLOSED) will return a `422 Unprocessable Entity`,
 and only one period per entity may be `OPEN` at a time (attempting to open a second one
-returns `409` with error code `PERIOD_ALREADY_OPEN`).
+returns `422 Unprocessable Entity` with error code `PERIOD_ALREADY_OPEN`).
 
 **Dependency:** Periods are required before any journal entries can be created 
 (the `periodId` foreign key on `JournalEntry` must reference a valid open period).
