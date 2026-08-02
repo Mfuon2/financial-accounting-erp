@@ -11,8 +11,8 @@ export const users = {
   deactivate:    (id, reason)    => isDemo.value ? Promise.resolve({ id, active: false })        : post(`/api/v1/users/${id}/deactivate`, { reason }),
   reactivate:    (id)            => isDemo.value ? Promise.resolve({ id, active: true })         : post(`/api/v1/users/${id}/reactivate`),
   resetPassword: (id)            => isDemo.value ? Promise.resolve()                             : post(`/api/v1/users/${id}/reset-password`),
-  apiKeys:       ()              => isDemo.value ? Promise.resolve(API_KEYS)                    : get('/api/v1/integration/keys'),
+  apiKeys:       (params)        => isDemo.value ? Promise.resolve(API_KEYS)                    : get(`/api/v1/integration/keys?${new URLSearchParams(params)}`),
   createApiKey:  (body)          => isDemo.value ? Promise.resolve({ ...body, id: Date.now() }) : post('/api/v1/integration/keys', body),
-  revokeApiKey:  (id)            => isDemo.value ? Promise.resolve()                            : post(`/api/v1/integration/keys/${id}/revoke`),
+  revokeApiKey:  (id, reason)    => isDemo.value ? Promise.resolve()                            : post(`/api/v1/integration/keys/${id}/revoke`, { reason }),
   rotateApiKey:  (id)            => isDemo.value ? Promise.resolve()                            : post(`/api/v1/integration/keys/${id}/rotate`),
 }
