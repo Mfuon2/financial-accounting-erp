@@ -2,6 +2,7 @@ package com.qesuite.accounting.shared.codegen.controller
 
 import com.qesuite.accounting.shared.codegen.service.EntityNumberConfigService
 import com.qesuite.accounting.shared.codegen.service.NumberConfigDto
+import com.qesuite.accounting.shared.security.SecurityUtils
 import org.springframework.web.bind.annotation.*
 import java.util.UUID
 
@@ -12,15 +13,20 @@ class NumberConfigController(
 ) {
 
     @GetMapping
-    fun getAll(@RequestParam entityId: UUID): List<NumberConfigDto> =
-        service.getAll(entityId)
+    fun getAll(@RequestParam entityId: UUID): List<NumberConfigDto> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return service.getAll(entityId)
+    }
 
     @PutMapping("/{moduleKey}")
     fun update(
         @PathVariable moduleKey: String,
         @RequestParam entityId: UUID,
         @RequestBody body: UpdatePrefixRequest,
-    ): NumberConfigDto = service.update(entityId, moduleKey, body.prefix, body.customFormat)
+    ): NumberConfigDto {
+        SecurityUtils.requireOwnEntity(entityId)
+        return service.update(entityId, moduleKey, body.prefix, body.customFormat)
+    }
 
     data class UpdatePrefixRequest(
         val prefix: String,

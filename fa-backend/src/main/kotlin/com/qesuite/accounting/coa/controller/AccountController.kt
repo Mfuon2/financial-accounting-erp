@@ -8,6 +8,7 @@ import com.qesuite.accounting.coa.service.AccountService
 import com.qesuite.accounting.coa.service.CreateAccountCommand
 import com.qesuite.accounting.coa.service.UpdateAccountCommand
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Schema
@@ -84,6 +85,7 @@ Use `parentAccountId` to retrieve only direct children of a specific parent node
         @RequestParam(required = false) @Parameter(description = "Filter by active status. true = active accounts only") isActive: Boolean?,
         @RequestParam(required = false) @Parameter(description = "Return only direct children of this parent account UUID") parentAccountId: UUID?
     ): ApiResponse<List<Account>> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(accountService.getAllAccounts(entityId, type, subtype, isActive, parentAccountId))
     }
 
@@ -111,6 +113,7 @@ Creates a new account in the Chart of Accounts.
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Circular reference detected or entity mismatch")
     )
     fun createAccount(@Valid @RequestBody command: CreateAccountCommand): ApiResponse<Account> {
+        SecurityUtils.requireOwnEntity(command.entityId)
         return ApiResponse.success(accountService.createAccount(command))
     }
 
@@ -126,7 +129,9 @@ Creates a new account in the Chart of Accounts.
     fun getAccount(
         @PathVariable @Parameter(description = "Account UUID", example = "770e8400-e29b-41d4-a716-446655440002") id: UUID
     ): ApiResponse<Account> {
-        return ApiResponse.success(accountService.findById(id))
+        val account = accountService.findById(id)
+        SecurityUtils.requireOwnEntity(account.entityId)
+        return ApiResponse.success(account)
     }
 
     @PutMapping("/accounts/{id}")
@@ -152,6 +157,7 @@ updated `accountSubtype` — they cannot be set directly.
         @PathVariable @Parameter(description = "Account UUID to update") id: UUID,
         @Valid @RequestBody command: UpdateAccountCommand
     ): ApiResponse<Account> {
+        SecurityUtils.requireOwnEntity(accountService.findById(id).entityId)
         return ApiResponse.success(accountService.updateAccount(id, command))
     }
 
@@ -177,6 +183,7 @@ visible in historical reports with `isActive=false` filter.
     fun deactivateAccount(
         @PathVariable @Parameter(description = "Account UUID to deactivate") id: UUID
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(accountService.findById(id).entityId)
         accountService.deactivateAccount(id)
         return ApiResponse.success(Unit)
     }
@@ -202,6 +209,7 @@ Useful for rendering breadcrumb navigation in the COA tree UI.
     fun getHierarchy(
         @PathVariable @Parameter(description = "Account UUID to retrieve the hierarchy for") id: UUID
     ): ApiResponse<List<Account>> {
+        SecurityUtils.requireOwnEntity(accountService.findById(id).entityId)
         return ApiResponse.success(accountService.getHierarchy(id))
     }
 
@@ -227,6 +235,7 @@ are not included.
         @Parameter(description = "Point-in-time date for balance calculation (ISO 8601, e.g. 2026-03-31). Defaults to today.", example = "2026-03-31")
         asOfDate: LocalDate?
     ): ApiResponse<BigDecimal> {
+        SecurityUtils.requireOwnEntity(accountService.findById(id).entityId)
         return ApiResponse.success(accountService.getBalance(id, asOfDate))
     }
 
@@ -267,6 +276,7 @@ Requires a functional currency (e.g., USD) to be registered for the entity first
         @RequestParam @Parameter(description = "Tenant/company UUID", example = "550e8400-e29b-41d4-a716-446655440000") entityId: UUID,
         @PathVariable("template_id") @Parameter(description = "Template identifier", schema = Schema(implementation = CoaTemplate::class)) template: CoaTemplate
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(entityId)
         accountService.applyTemplate(entityId, template)
         return ApiResponse.success(Unit)
     }
@@ -290,6 +300,7 @@ complex multi-level hierarchy in a single API call.
         @RequestParam @Parameter(description = "Tenant/company UUID for all imported accounts") entityId: UUID,
         @RequestBody commands: List<CreateAccountCommand>
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(entityId)
         accountService.importAccounts(entityId, commands)
         return ApiResponse.success(Unit)
     }
@@ -302,6 +313,7 @@ complex multi-level hierarchy in a single API call.
     fun rebuildHierarchy(
         @RequestParam @Parameter(description = "Tenant/company UUID") entityId: UUID
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(entityId)
         accountService.rebuildHierarchy(entityId)
         return ApiResponse.success(Unit)
     }
@@ -321,6 +333,7 @@ before submitting the full `POST /accounts` request.
         @RequestParam @Parameter(description = "Tenant/company UUID") entityId: UUID,
         @RequestParam @Parameter(description = "Account code to validate (e.g. '1100')", example = "1100") code: String
     ): ApiResponse<Boolean> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(accountService.validateAccountCode(entityId, code))
     }
 }

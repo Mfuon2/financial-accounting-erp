@@ -3,6 +3,7 @@ package com.qesuite.accounting.shared.codegen.controller
 import com.qesuite.accounting.shared.codegen.service.CodeGeneratorService
 import com.qesuite.accounting.shared.codegen.service.EntityNumberConfigService
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -40,6 +41,7 @@ class CodeGeneratorController(
         @RequestParam @Parameter(description = "Module key, e.g. FIXED_ASSET, CUSTOMER", required = false)
         moduleKey: String? = null,
     ): ApiResponse<CodeSuggestion> {
+        SecurityUtils.requireOwnEntity(entityId)
         val code = if (moduleKey != null) {
             val cfg = numberConfigService.resolveConfig(entityId, moduleKey)
             codeGeneratorService.peek(entityId, cfg.prefix, cfg.yearScoped, customFormat = cfg.customFormat)
@@ -57,8 +59,10 @@ class CodeGeneratorController(
     fun generate(
         @RequestParam @Parameter(description = "Entity UUID", required = true) entityId: UUID,
         @RequestParam @Parameter(description = "Code prefix, e.g. CU, SUPP, INV", required = true) prefix: String
-    ): ApiResponse<CodeSuggestion> =
-        ApiResponse.success(CodeSuggestion(prefix.uppercase(), codeGeneratorService.next(entityId, prefix)))
+    ): ApiResponse<CodeSuggestion> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(CodeSuggestion(prefix.uppercase(), codeGeneratorService.next(entityId, prefix)))
+    }
 
     @GetMapping("/all")
     @Operation(
@@ -67,8 +71,10 @@ class CodeGeneratorController(
     )
     fun peekAll(
         @RequestParam @Parameter(description = "Entity UUID", required = true) entityId: UUID
-    ): ApiResponse<Map<String, String>> =
-        ApiResponse.success(codeGeneratorService.peekAll(entityId))
+    ): ApiResponse<Map<String, String>> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(codeGeneratorService.peekAll(entityId))
+    }
 }
 
 data class CodeSuggestion(val prefix: String, val code: String)

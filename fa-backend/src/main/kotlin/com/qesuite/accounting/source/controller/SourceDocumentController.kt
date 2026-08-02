@@ -76,8 +76,10 @@ Captures a new financial source document in **DRAFT** status.
     )
     fun create(
         @Valid @RequestBody request: CreateSourceDocumentRequest
-    ): ApiResponse<SourceDocument> =
-        ApiResponse.success(sourceDocumentService.createDocument(request))
+    ): ApiResponse<SourceDocument> {
+        SecurityUtils.requireOwnEntity(request.entityId)
+        return ApiResponse.success(sourceDocumentService.createDocument(request))
+    }
 
     @GetMapping
     @Operation(
@@ -88,8 +90,10 @@ Captures a new financial source document in **DRAFT** status.
         @RequestParam
         @Parameter(description = "Tenant/company UUID", example = "550e8400-e29b-41d4-a716-446655440000")
         entityId: UUID
-    ): ApiResponse<List<SourceDocument>> =
-        ApiResponse.success(sourceDocumentService.getAllDocuments(entityId))
+    ): ApiResponse<List<SourceDocument>> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(sourceDocumentService.getAllDocuments(entityId))
+    }
 
     @GetMapping("/{id}")
     @Operation(summary = "Retrieve a source document by ID")
@@ -99,8 +103,11 @@ Captures a new financial source document in **DRAFT** status.
     )
     fun getById(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
-    ): ApiResponse<SourceDocument> =
-        ApiResponse.success(sourceDocumentService.findById(id))
+    ): ApiResponse<SourceDocument> {
+        val doc = sourceDocumentService.findById(id)
+        SecurityUtils.requireOwnEntity(doc.entityId)
+        return ApiResponse.success(doc)
+    }
 
     @PutMapping("/{id}")
     @Operation(
@@ -120,8 +127,10 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun update(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID,
         @Valid @RequestBody request: UpdateSourceDocumentRequest
-    ): ApiResponse<SourceDocument> =
-        ApiResponse.success(sourceDocumentService.updateDocument(id, request))
+    ): ApiResponse<SourceDocument> {
+        SecurityUtils.requireOwnEntity(sourceDocumentService.findById(id).entityId)
+        return ApiResponse.success(sourceDocumentService.updateDocument(id, request))
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // State machine transitions
@@ -136,6 +145,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun submit(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
+        SecurityUtils.requireOwnEntity(sourceDocumentService.findById(id).entityId)
         val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.SUBMITTED)
         return ApiResponse.success(updated)
     }
@@ -149,6 +159,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun review(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
+        SecurityUtils.requireOwnEntity(sourceDocumentService.findById(id).entityId)
         val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.REVIEWED)
         return ApiResponse.success(updated)
     }
@@ -162,6 +173,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun approve(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
+        SecurityUtils.requireOwnEntity(sourceDocumentService.findById(id).entityId)
         val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.APPROVED)
         return ApiResponse.success(updated)
     }
@@ -175,6 +187,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun archive(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
+        SecurityUtils.requireOwnEntity(sourceDocumentService.findById(id).entityId)
         val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.ARCHIVED)
         return ApiResponse.success(updated)
     }
@@ -191,6 +204,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun void(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
+        SecurityUtils.requireOwnEntity(sourceDocumentService.findById(id).entityId)
         val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.VOID)
         return ApiResponse.success(updated)
     }
@@ -207,6 +221,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     fun restore(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
+        SecurityUtils.requireOwnEntity(sourceDocumentService.findById(id).entityId)
         val updated = sourceDocumentService.transitionStatus(id, SourceDocumentStatus.DRAFT)
         return ApiResponse.success(updated)
     }
@@ -222,6 +237,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
         @RequestParam("file") file: MultipartFile,
     ): ApiResponse<SourceDocumentAttachment> {
         val doc = sourceDocumentService.findById(id)
+        SecurityUtils.requireOwnEntity(doc.entityId)
         val stored = storageService.store(doc.entityId, file)
         val attachment = SourceDocumentAttachment(
             entityId    = doc.entityId,
@@ -237,8 +253,10 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
 
     @GetMapping("/{id}/attachments")
     @Operation(summary = "List all active attachments for a source document")
-    fun listAttachments(@PathVariable id: UUID): ApiResponse<List<SourceDocumentAttachment>> =
-        ApiResponse.success(attachmentRepository.findByDocumentIdAndIsActiveTrue(id))
+    fun listAttachments(@PathVariable id: UUID): ApiResponse<List<SourceDocumentAttachment>> {
+        SecurityUtils.requireOwnEntity(sourceDocumentService.findById(id).entityId)
+        return ApiResponse.success(attachmentRepository.findByDocumentIdAndIsActiveTrue(id))
+    }
 
     @GetMapping("/{id}/attachments/{attachmentId}/download")
     @Operation(summary = "Download an attachment")
@@ -248,6 +266,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     ): ResponseEntity<ByteArray> {
         val att = attachmentRepository.findById(attachmentId)
             .orElseThrow { ResourceNotFoundException("ATTACHMENT_NOT_FOUND", attachmentId, "Attachment") }
+        SecurityUtils.requireOwnEntity(att.entityId)
         val bytes = storageService.load(att.storagePath).readBytes()
         return ResponseEntity.ok()
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${att.fileName}\"")
@@ -264,6 +283,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     ) {
         val att = attachmentRepository.findById(attachmentId)
             .orElseThrow { ResourceNotFoundException("ATTACHMENT_NOT_FOUND", attachmentId, "Attachment") }
+        SecurityUtils.requireOwnEntity(att.entityId)
         att.isActive = false
         attachmentRepository.save(att)
     }
@@ -276,6 +296,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun delete(@PathVariable id: UUID) {
         val doc = sourceDocumentService.findById(id)
+        SecurityUtils.requireOwnEntity(doc.entityId)
         if (doc.status != SourceDocumentStatus.DRAFT && doc.status != SourceDocumentStatus.VOID) {
             throw com.qesuite.accounting.shared.exceptions.ValidationException(
                 "INVALID_STATE",

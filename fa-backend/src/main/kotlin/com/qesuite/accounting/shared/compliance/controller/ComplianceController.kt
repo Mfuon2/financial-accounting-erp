@@ -3,6 +3,7 @@ package com.qesuite.accounting.shared.compliance.controller
 import com.qesuite.accounting.shared.compliance.service.ComplianceResult
 import com.qesuite.accounting.shared.compliance.service.ComplianceService
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
@@ -54,6 +55,8 @@ classified correctly.
         @RequestParam
         @Parameter(description = "Tenant/company UUID", example = "550e8400-e29b-41d4-a716-446655440000")
         entityId: UUID
-    ): ApiResponse<ComplianceResult> =
-        ApiResponse.success(complianceService.validateIas1Compliance(entityId))
+    ): ApiResponse<ComplianceResult> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(complianceService.validateIas1Compliance(entityId))
+    }
 }
