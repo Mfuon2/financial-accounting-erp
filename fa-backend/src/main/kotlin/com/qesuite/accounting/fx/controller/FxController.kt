@@ -11,6 +11,7 @@ import com.qesuite.accounting.fx.service.RevaluationPreviewResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -65,6 +66,7 @@ class FxController(
     fun createCurrency(
         @Valid @RequestBody command: CreateCurrencyCommand
     ): ApiResponse<Currency> {
+        SecurityUtils.requireOwnEntity(command.entityId)
         // Validate: if marking as functional, ensure no other functional currency exists.
         if (command.isFunctional) {
             val existing = currencyRepository.findByEntityIdAndIsFunctionalTrue(command.entityId)
@@ -106,8 +108,10 @@ class FxController(
     )
     fun listCurrencies(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID
-    ): ApiResponse<List<Currency>> =
-        ApiResponse.success(currencyRepository.findAllByEntityId(entityId))
+    ): ApiResponse<List<Currency>> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(currencyRepository.findAllByEntityId(entityId))
+    }
 
     @PutMapping("/currencies/{id}")
     @Operation(summary = "Update currency metadata")
@@ -118,6 +122,7 @@ class FxController(
         val currency = currencyRepository.findById(id).orElseThrow {
             ResourceNotFoundException("CURRENCY_NOT_FOUND", id, "Currency")
         }
+        SecurityUtils.requireOwnEntity(currency.entityId)
         currency.currencyName = request.currencyName
         request.symbol?.let { currency.symbol = it }
         request.decimals?.let { currency.decimals = it }
@@ -135,6 +140,7 @@ class FxController(
     fun createExchangeRate(
         @Valid @RequestBody command: CreateExchangeRateCommand
     ): ApiResponse<ExchangeRate> {
+        SecurityUtils.requireOwnEntity(command.entityId)
         val rate = ExchangeRate(
             entityId = command.entityId,
             fromCurrency = command.fromCurrency,
@@ -153,8 +159,10 @@ class FxController(
     )
     fun listExchangeRates(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID
-    ): ApiResponse<List<ExchangeRate>> =
-        ApiResponse.success(exchangeRateRepository.findAllByEntityIdOrderByRateDateDescFromCurrencyAsc(entityId))
+    ): ApiResponse<List<ExchangeRate>> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(exchangeRateRepository.findAllByEntityIdOrderByRateDateDescFromCurrencyAsc(entityId))
+    }
 
     @GetMapping("/exchange-rates")
     @Operation(
@@ -171,6 +179,7 @@ class FxController(
         @RequestParam(required = false, defaultValue = "SPOT")
         @Parameter(description = "Rate type: SPOT, CLOSING, or AVERAGE") rateType: RateType
     ): ApiResponse<BigDecimal> {
+        SecurityUtils.requireOwnEntity(entityId)
         val rate = exchangeRateService.getRate(entityId, fromCurrency, toCurrency, date, rateType)
         return ApiResponse.success(rate)
     }
@@ -184,6 +193,7 @@ class FxController(
         val rate = exchangeRateRepository.findById(id).orElseThrow {
             ResourceNotFoundException("EXCHANGE_RATE_NOT_FOUND", id, "ExchangeRate")
         }
+        SecurityUtils.requireOwnEntity(rate.entityId)
         rate.rateValue = request.rateValue
         return ApiResponse.success(exchangeRateService.saveRate(rate))
     }
@@ -198,8 +208,10 @@ class FxController(
     fun previewRevaluation(
         @RequestParam entityId: UUID,
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate
-    ): ApiResponse<RevaluationPreviewResponse> =
-        ApiResponse.success(fxRevaluationService.previewRevaluation(entityId, date))
+    ): ApiResponse<RevaluationPreviewResponse> {
+        SecurityUtils.requireOwnEntity(entityId)
+        return ApiResponse.success(fxRevaluationService.previewRevaluation(entityId, date))
+    }
 
     @PostMapping("/revaluation")
     @Operation(
@@ -217,6 +229,7 @@ endpoint.
     fun runRevaluation(
         @Valid @RequestBody command: RunRevaluationCommand
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(command.entityId)
         fxRevaluationService.runRevaluation(
             entityId = command.entityId,
             periodId = command.periodId,

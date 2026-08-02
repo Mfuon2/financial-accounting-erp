@@ -9,6 +9,7 @@ import com.qesuite.accounting.assets.service.DepreciationService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
@@ -37,6 +38,7 @@ class AssetController(
         description = "Registers a fixed asset with COA account mappings. Asset code must be unique within the entity."
     )
     fun createAsset(@Valid @RequestBody request: CreateAssetRequest): ApiResponse<FixedAsset> {
+        SecurityUtils.requireOwnEntity(request.entityId)
         val command = CreateAssetCommand(
             entityId            = request.entityId,
             periodId            = request.periodId,
@@ -69,6 +71,7 @@ class AssetController(
         @RequestParam(defaultValue = "acquisitionDate") sort: String,
         @RequestParam(defaultValue = "ASC") direction: String
     ): ApiResponse<PagedResponse<FixedAsset>> {
+        SecurityUtils.requireOwnEntity(entityId)
         val sortDirection = try {
             Sort.Direction.fromString(direction)
         } catch (e: IllegalArgumentException) {
@@ -91,8 +94,11 @@ class AssetController(
         summary = "Get a fixed asset by ID",
         description = "Returns the full detail of a single fixed asset."
     )
-    fun getAsset(@PathVariable id: UUID): ApiResponse<FixedAsset> =
-        ApiResponse.success(assetMasterService.findById(id))
+    fun getAsset(@PathVariable id: UUID): ApiResponse<FixedAsset> {
+        val asset = assetMasterService.findById(id)
+        SecurityUtils.requireOwnEntity(asset.entityId)
+        return ApiResponse.success(asset)
+    }
 
     @PostMapping("/{id}/dispose")
     @Operation(
@@ -104,6 +110,7 @@ class AssetController(
         @PathVariable id: UUID,
         @Valid @RequestBody request: DisposeAssetRequest
     ): ApiResponse<FixedAsset> {
+        SecurityUtils.requireOwnEntity(assetMasterService.findById(id).entityId)
         val disposed = assetMasterService.disposeAsset(
             assetId = id,
             periodId = request.periodId,
@@ -117,6 +124,7 @@ class AssetController(
     @PostMapping("/depreciation/run")
     @Operation(summary = "Run depreciation for an entity")
     fun runDepreciation(@Valid @RequestBody request: RunDepreciationRequest): ApiResponse<String> {
+        SecurityUtils.requireOwnEntity(request.entityId)
         depreciationService.runDepreciation(request.entityId, request.periodId, request.date)
         return ApiResponse.success("Depreciation run completed for entity ${request.entityId} on ${request.date}.")
     }
@@ -125,6 +133,7 @@ class AssetController(
     @PostMapping("/batch-depreciate")
     @Operation(summary = "Batch-run depreciation (alias for /depreciation/run)")
     fun batchDepreciate(@Valid @RequestBody request: RunDepreciationRequest): ApiResponse<String> {
+        SecurityUtils.requireOwnEntity(request.entityId)
         depreciationService.runDepreciation(request.entityId, request.periodId, request.date)
         return ApiResponse.success("Batch depreciation completed for entity ${request.entityId} on ${request.date}.")
     }
@@ -135,6 +144,7 @@ class AssetController(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateAssetRequest
     ): ApiResponse<FixedAsset> {
+        SecurityUtils.requireOwnEntity(assetMasterService.findById(id).entityId)
         val command = com.qesuite.accounting.assets.service.UpdateAssetCommand(
             assetName          = request.assetName,
             salvageValue       = request.salvageValue,
@@ -151,8 +161,10 @@ class AssetController(
     fun getDepreciationSchedule(
         @PathVariable id: UUID,
         @RequestParam(defaultValue = "12") months: Int
-    ): ApiResponse<List<com.qesuite.accounting.assets.service.DepreciationScheduleEntry>> =
-        ApiResponse.success(assetMasterService.getDepreciationSchedule(id, months))
+    ): ApiResponse<List<com.qesuite.accounting.assets.service.DepreciationScheduleEntry>> {
+        SecurityUtils.requireOwnEntity(assetMasterService.findById(id).entityId)
+        return ApiResponse.success(assetMasterService.getDepreciationSchedule(id, months))
+    }
 }
 
 // ---------------------------------------------------------------------------
