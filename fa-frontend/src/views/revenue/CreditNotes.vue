@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { isDemo } from '@/composables/useAppMode.js'
 import { useAuth } from '@/composables/useAuth.js'
-import { invoices as invoicesApi, customers as customersApi, journals as journalsApi } from '@/api/index.js'
+import { invoices as invoicesApi, customers as customersApi, journals as journalsApi, creditNotes as creditNotesApi } from '@/api/index.js'
 import { useToast } from '@/composables/useToast.js'
 import { fmt, fmtDate } from '@/utils/format.js'
 import PageHeader from '@/components/PageHeader.vue'
@@ -100,7 +100,9 @@ async function loadCreditNotes() {
   loading.value = true
   error.value   = null
   try {
-    const res = await invoicesApi.creditNotes({ entityId: entityId.value })
+    // Standalone /api/v1/credit-notes resource (backed by InvoiceService's
+    // status=CREDIT_NOTE filter) rather than filtering the general invoices list.
+    const res = await creditNotesApi.list({ entityId: entityId.value })
     if (res?.content) list.value = res.content
     else if (Array.isArray(res)) list.value = res
     else list.value = []

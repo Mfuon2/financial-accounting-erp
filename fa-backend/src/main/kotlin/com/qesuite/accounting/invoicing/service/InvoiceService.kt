@@ -547,6 +547,17 @@ class InvoiceService(
         .orElseThrow { ResourceNotFoundException("INVOICE_NOT_FOUND", id, "Invoice") }
 
     /**
+     * §14.2 — Standalone credit-notes listing for the `/api/v1/credit-notes` resource.
+     * Credit notes are Invoice rows with status = CREDIT_NOTE (negative amounts, terminal
+     * state — see [createCreditNote]). Deliberately kept separate from [findByEntity]:
+     * that method's customerId branch takes priority over the status filter and would
+     * silently return all of a customer's invoices instead of just their credit notes.
+     */
+    @Transactional(readOnly = true)
+    fun findCreditNotesByEntity(entityId: UUID, pageable: Pageable): Page<Invoice> =
+        invoiceRepository.findByEntityIdAndStatus(entityId, InvoiceStatus.CREDIT_NOTE, pageable)
+
+    /**
      * §14, §7.3 — Paged listing with optional filters. Combinations of filters are
      * resolved by repository methods; unsupported combinations fall back to the
      * narrowest applicable filter.

@@ -1,4 +1,4 @@
-import { INVOICES, CREDIT_NOTES, AR_AGEING } from '@/data/index.js'
+import { INVOICES, AR_AGEING } from '@/data/index.js'
 import { isDemo } from '@/composables/useAppMode.js'
 import { get, post } from './client.js'
 
@@ -100,10 +100,4 @@ export const invoices = {
     isDemo.value
       ? Promise.resolve(demoArAgeing())
       : get(`/api/v1/invoices/ar-ageing?${new URLSearchParams(params ?? {})}`),
-
-  // Convenience: list credit notes only
-  creditNotes: (params) =>
-    isDemo.value
-      ? Promise.resolve({ content: CREDIT_NOTES.map(c => ({ ...c, invoiceNumber: c.ref, issueDate: c.date, totalAmount: c.amount, currencyCode: c.currency, outstandingAmount: 0, status: 'CREDIT_NOTE' })), totalElements: CREDIT_NOTES.length })
-      : get(`/api/v1/invoices?status=CREDIT_NOTE&${new URLSearchParams(params ?? {})}`),
 }
