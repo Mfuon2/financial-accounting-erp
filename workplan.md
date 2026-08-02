@@ -32,16 +32,37 @@ work begins.
   (two-pass Financial Systems Architect review); see MEMORY.md "Known Issues" for detail.
 - [DONE] BUG-25 (single-open-period enforcement) — verified genuinely correct today by an actual test
   run against the real `PeriodService` (not read-through), per the Financial Systems Architect's first
-  review pass. Small follow-up remains (not blocking): the verification test was temporary and was
-  deleted after the run, so add a permanent `PERIOD_ALREADY_OPEN` regression test to
-  `PeriodServiceTest.kt` — see item 1 below.
-- Add a permanent `PERIOD_ALREADY_OPEN` regression test to `PeriodServiceTest.kt` (closes the one
-  residual gap from the BUG-25 verification).
-- Close the confirmed Tier 1 API gaps: `PUT` endpoints for FX currencies, exchange rates, tax codes,
-  fixed assets; comparative trial balance implementation; organization RBAC fix for entity-scoped
-  `SYSTEM_ADMIN`.
-- Close Tier 2 workflow gaps: standalone credit-notes endpoint, closing-preview endpoint,
-  source-document restore, IFRS 15 over-time revenue recognition period-end job.
+  review pass.
+- [DONE] Add a permanent `PERIOD_ALREADY_OPEN` regression test to `PeriodServiceTest.kt` (`ac7da9c`) —
+  closes the residual gap from the BUG-25 verification. Financial Systems Architect proved it's a
+  real regression test, not a tautology, by disabling the guard in `PeriodService.kt`, confirming the
+  test failed, restoring the original code, confirming `git diff` was empty, and confirming the test
+  passed again. **Engineering + Accounting approved.**
+- [DONE] Standalone credit-notes endpoint (`8eeee49`): `GET /api/v1/credit-notes`, new
+  `CreditNoteController.kt` + `InvoiceService.findCreditNotesByEntity()`, real backend tests, and
+  frontend rewired (`CreditNotes.vue`, `creditNotes.js`) to the real endpoint instead of a stale
+  double-path. **Engineering + Accounting approved.**
+- [DONE — documentation correction, no code change] Re-verified the old `ROADMAP.md`-derived "Tier 1"
+  API gap list (`PUT` endpoints for FX currencies/exchange rates/tax codes/fixed assets; comparative
+  trial balance; organization RBAC for entity-scoped `SYSTEM_ADMIN`) plus the Tier 2 closing-preview
+  and source-document-restore items against current code and confirmed all are **already fully and
+  correctly implemented** — this was a stale carried-forward gap-analysis entry, not an open defect.
+  See MEMORY.md Known Issues for detail.
+- **TOP PRIORITY, fix cycle starting now — codebase-wide IDOR / cross-entity data-isolation
+  hardening:** only 3 of the controllers that accept a client-supplied `entityId`
+  (`OrganizationController`, `ApiKeyController`, `UserController`) verify it against the authenticated
+  user's own entity; the remaining ~20, including `JournalController`, `LedgerController`,
+  `TrialBalanceController`, `InvoiceController`, `BillController`, `AssetController`, and the
+  just-added `CreditNoteController`, do not — an authenticated user could potentially read another
+  entity's financial data by supplying a different `entityId`. Real, severe, pre-existing (surfaced by
+  regression-checking the new `CreditNoteController` against its siblings, not introduced by it). This
+  item is sequenced **above** the remaining Tier 2/3 items below per CLAUDE.md's correctness >
+  security priority ordering — a security-hardening pass across all ~20 affected controllers, adding
+  the same entity-ownership check already used correctly by the 3 compliant controllers. Each fix
+  routes through Accounting review wherever the controller touches money/postings/periods (most of
+  them do) per CLAUDE.md §17. See MEMORY.md Known Issues (top) and Open Risks/Blockers (top).
+- Remaining Tier 2 workflow gap: IFRS 15 over-time revenue recognition period-end recognition job
+  (point-in-time works; the other Tier 2 items are now resolved above).
 - Wire the Spring Batch background-job pipeline so depreciation and FX revaluation run
   asynchronously (prerequisite for Phase 2/3 batch-heavy work like consolidation).
 - Seed COA template data so the signup wizard works end-to-end.
@@ -61,6 +82,11 @@ work begins.
     `year` in `code_sequences`).
   - Two backend test files entirely commented out end-to-end, silently contributing 0 tests:
     `InvoiceServiceTest.kt` and `ReceiptServiceTest.kt`.
+- **Normal-priority backlog item, confirmed pre-existing bug (surfaced while building the
+  credit-notes endpoint):** `InvoiceService.kt:574-575` — `findByEntity()`'s `when` branches on
+  `customerId != null` before `status != null`, so supplying both filters silently drops the `status`
+  filter. Needs a combined-filter repository method (e.g. `findByEntityIdAndCustomerIdAndStatus`)
+  eventually. Not blocking, not urgent.
 
 **Exit criteria:** All Phase 0 items have Engineering approval; every item touching postings,
 periods, or reports additionally has Accounting approval; MEMORY.md reflects a clean, current
@@ -192,14 +218,20 @@ transactional guarantees.
 
 ## Immediate Next Actions (Top of Backlog)
 
-1. Add a permanent `PERIOD_ALREADY_OPEN` regression test to `PeriodServiceTest.kt` — BUG-25 itself is
-   verified correct (see MEMORY.md), this just locks it in with a permanent test instead of the
-   temporary one used to verify it. Quick, small.
-2. Close the confirmed Tier 1 API gaps (missing `PUT` endpoints, comparative trial balance,
-   organization RBAC fix) — next largest block of Phase 0 work.
-3. Delivery Manager to break down the remaining Phase 0 items (Tier 2/3 gaps, the three
-   hardcoded-category backlog items, and the test-suite-health backlog item) into individually
-   trackable tasks in the next working session.
+1. **TOP PRIORITY — codebase-wide IDOR fix cycle** (see Phase 0 above): add entity-ownership
+   verification to the ~20 controllers that currently trust a client-supplied `entityId` without
+   checking it against the authenticated user's own entity. Starts immediately; each fix requires
+   Engineering + (where applicable) Accounting sign-off per AGENTS.md before being marked `[DONE]`.
+2. Close the remaining Tier 2 gap: IFRS 15 over-time revenue recognition period-end recognition job.
+3. Close Tier 3 infrastructure gaps (Spring Batch pipeline, COA template seed data, M-Pesa session
+   table).
+4. Delivery Manager to break down the remaining Phase 0 items (Tier 3 gaps, the three
+   hardcoded-category backlog items, the `InvoiceService.kt` filter bug, and the test-suite-health
+   backlog item) into individually trackable tasks in the next working session.
+
+*(The permanent `PERIOD_ALREADY_OPEN` regression test and the standalone credit-notes endpoint that
+were previously top of this list are now `[DONE]` — see Phase 0 above. The old Tier 1 API gap list
+previously listed here is resolved as a documentation correction, not new work — also see Phase 0.)*
 
 ## How This Plan Is Maintained
 

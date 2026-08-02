@@ -1,7 +1,10 @@
 # MEMORY.md — Project Memory
 
-**Last updated:** 2026-08-02 (Phase 0 period-management fix + ApiKeys wiring taken through full
-governance gate — first module to complete Engineering + Accounting sign-off under this model)
+**Last updated:** 2026-08-02 (Batch 3: BUG-25 permanent regression test landed and approved
+(`ac7da9c`); standalone credit-notes endpoint landed and approved (`8eeee49`); old ROADMAP.md-derived
+"Tier 1" gap list re-verified and found already resolved in current code — documentation correction,
+no code change; **new codebase-wide IDOR finding logged as top priority, fix cycle starting
+immediately**)
 
 This is the single source of truth for "where things stand." Every completed unit of work updates
 this file per AGENTS.md's Delivery Manager responsibilities. See [workplan.md](workplan.md) for the
@@ -98,6 +101,64 @@ Carried forward from the (uncommitted-deleted) internal gap analysis and bug rep
 where noted below. First Phase 0 task was to confirm which are still open — see the
 period-management line below for the result.
 
+**TOP PRIORITY — HIGH, IN PROGRESS (fix cycle started): codebase-wide cross-entity data-isolation
+(IDOR) gap.** The Financial Systems Architect's review of the new `CreditNoteController` (below)
+regression-checked it against its sibling controllers per AGENTS.md's "regression-check peer
+features" mandate, and found the gap is systemic, not local: of the controllers that accept a
+client-supplied `entityId` request parameter, only **3** actually verify it matches the authenticated
+user's own entity before using it — `OrganizationController.kt`, `ApiKeyController.kt`, and
+`UserController.kt` (each does the equivalent of `if (entityId != currentUser.entityId) throw
+ValidationException("FORBIDDEN", ..., 403)`). The remaining majority, including `JournalController`,
+`LedgerController`, `TrialBalanceController`, `InvoiceController`, `BillController`,
+`AssetController`, and the just-added `CreditNoteController`, trust the client-supplied `entityId`
+blindly — an authenticated user can potentially read another entity's financial data (journals,
+ledger, trial balance, invoices, bills, assets, credit notes) by passing a different entity's
+`entityId`. This is a **genuine, severe, pre-existing** defect spanning most of the API surface — it
+was not introduced by this session's work (`CreditNoteController` simply inherited the same pattern
+as its ~19+ siblings), but it is real and urgent per CLAUDE.md's stated priority order (correctness >
+**security** > everything else). A dedicated fix cycle starts immediately following this update —
+see Open Risks/Blockers, Outstanding Reviews, and Next Recommended Action below, and
+`workplan.md` Phase 0 for the tracked task.
+
+**RESOLVED — old ROADMAP.md-derived "Tier 1" gap list, re-verified against current code and found
+already correct (documentation correction, not new work):** The "Tier 1 (blocks UI edit buttons)"
+items previously listed below as open gaps — missing `PUT` endpoints for FX currencies, exchange
+rates, tax codes, and fixed assets; the comparative trial balance endpoint; and the overly-restrictive
+organization RBAC blocking an entity-scoped `SYSTEM_ADMIN` from viewing/editing their own
+organization profile — were re-checked during this session's credit-notes work and confirmed to
+already be fully and correctly implemented in the current codebase. No code was written for these;
+this was a stale internal gap-analysis carried forward from the pre-governance `ROADMAP.md`/
+`BUG_REPORT_V2.md` notes that had not been re-verified against the code as it exists today. The
+former "Tier 1" bullet list under "Confirmed backend gaps" below is retained with a strikethrough-
+equivalent note rather than silently deleted, per Delivery Manager practice of not erasing history.
+
+**RESOLVED — standalone credit-notes endpoint (was Tier 2 gap), `8eeee49`, Engineering + Accounting
+approved:** Added `GET /api/v1/credit-notes?entityId=&page=&size=` via new `CreditNoteController.kt`
+and `InvoiceService.findCreditNotesByEntity(entityId, pageable)`, which calls
+`invoiceRepository.findByEntityIdAndStatus(entityId, CREDIT_NOTE, pageable)` directly rather than
+through `findByEntity()` (which would silently drop the `CREDIT_NOTE` filter — see the new bug logged
+below). Financial Systems Architect independently verified: `Invoice.status=CREDIT_NOTE` is a
+distinct terminal enum value, not confusable with a regular invoice; new backend tests
+(`InvoiceServiceCreditNotesTest`, `CreditNoteControllerTest`) are real — only the repository is
+mocked, real service/controller logic is exercised, and the controller test proves an actual HTTP
+round-trip returns real credit-note data; frontend (`CreditNotes.vue`, `creditNotes.js`) is genuinely
+rewired to call the new endpoint with the authenticated user's real `entityId`, not demo data — this
+also cleaned up a previously confusing double-path (the view had been calling
+`invoicesApi.creditNotes()` against a different endpoint while a separate, correct `creditNotes.js`
+client sat unused; the dead `invoices.js` method was removed). **APPROVED.**
+
+**RESOLVED — BUG-25 permanent regression test, `ac7da9c`, Engineering + Accounting approved — closes
+the follow-up logged in the prior update:** Added `should reject opening a second period while one is
+already OPEN for the entity (BUG-25)` to `PeriodServiceTest.kt`. Financial Systems Architect
+independently proved this is a **real** regression test, not a tautology, by: temporarily disabling
+the `PERIOD_ALREADY_OPEN` guard in `PeriodService.kt`, confirming the new test then **failed**,
+restoring the original guard code, confirming `git diff` was empty (no accidental permanent change
+left behind), and confirming the test **passed again**. `mvn clean test` (JDK 21): `PeriodServiceTest`
+now 7/7 (was 6/7 baseline); full suite 39/41 passing, same two known pre-existing unrelated
+issues as every prior cycle. **APPROVED.** The single-open-period control is now locked in by a
+permanent test, not merely proved correct by a temporary one — the residual gap noted in the prior
+update is fully closed.
+
 **RESOLVED — Periods module (BUG-24/27/34), confirmed fixed and verified end-to-end:**
 Fiscal-year generation defaulting to a nonsensical year (BUG-24), silent working-context switching
 on historical fiscal-year generation (BUG-27), and the missing fiscal-year switcher UI (BUG-34) are
@@ -128,12 +189,9 @@ confirmed: attempting to transition a second period to `OPEN` while one is alrea
 same entity throws `BusinessRuleViolationException` with `errorCode=PERIOD_ALREADY_OPEN`,
 `httpStatus=422`, and leaves the target period unmutated — surefire reported `Tests run: 3,
 Failures: 0`. This confirms the single-open-period control genuinely works today, independent of and
-prior to the BUG-24/27/34 fixes above. **Caveat:** the verification tests were temporary and were
-deleted after the run (per the reviewer's own report) — the permanent `PeriodServiceTest.kt` suite
-(6/6 passing after this session's fixes) has not been confirmed to include an equivalent *permanent*
-regression test for this specific scenario. Treat the *behavior* as verified-correct today, but log
-"add a permanent `PERIOD_ALREADY_OPEN` regression test to `PeriodServiceTest.kt`" as a small
-follow-up so a future change can't silently regress this without the suite catching it.
+prior to the BUG-24/27/34 fixes above. The verification tests used in that first pass were temporary
+and were deleted after the run — **this gap is now closed**: see "RESOLVED — BUG-25 permanent
+regression test, `ac7da9c`" above for the permanent test that locks the behavior in.
 
 **Critical (from BUG_REPORT_V2, still unverified against current code):**
 - Journal Entries: critical issue logged as BUG-29 (detail not preserved in this summary — see
@@ -146,12 +204,19 @@ follow-up so a future change can't silently regress this without the suite catch
 
 **Confirmed backend gaps (from the internal integration/gap-analysis notes, backend assessed ~82%
 ready overall):**
-- *Tier 1 (blocks UI edit buttons):* comparative trial balance endpoint is a stub; missing `PUT`
+- ~~*Tier 1 (blocks UI edit buttons):* comparative trial balance endpoint is a stub; missing `PUT`
   endpoints for FX currencies, exchange rates, tax codes, and fixed assets; overly restrictive RBAC
-  blocks a regular entity `SYSTEM_ADMIN` from viewing/editing their own organization profile.
-- *Tier 2 (workflow gaps):* no standalone credit-notes list endpoint; no closing-preview endpoint
-  (can't preview closing entries before committing); source-document restore (un-void) not wired;
-  IFRS 15 over-time revenue recognition has no period-end recognition job yet (point-in-time works).
+  blocks a regular entity `SYSTEM_ADMIN` from viewing/editing their own organization profile.~~
+  **RESOLVED — re-verified against current code this session and found already fully implemented and
+  correct; see "RESOLVED — old ROADMAP.md-derived 'Tier 1' gap list" above. This was a stale carried-
+  forward gap-analysis entry, not an open defect.**
+- *Tier 2 (workflow gaps):* ~~no standalone credit-notes list endpoint~~ **RESOLVED, see `8eeee49`
+  above.** No closing-preview endpoint (can't preview closing entries before committing) —
+  re-verified this session and, per the coordinator's independent check, this is also already
+  implemented; not carried forward as an open gap. Source-document restore (un-void) — likewise
+  re-verified already implemented; not carried forward as an open gap. IFRS 15 over-time revenue
+  recognition has no period-end recognition job yet (point-in-time works) — this one remains a real,
+  open gap, unaffected by the re-verification above.
 - *Tier 3 (infrastructure):* no external FX rate feed; no bulk source-document upload; no AR
   statement email send / receipt resend; Spring Batch declared but not wired — depreciation and FX
   revaluation run synchronously in the request thread; no historical period-balance snapshot table
@@ -171,6 +236,15 @@ screen):**
   `fa-frontend/src/views/revenue/Invoices.vue`.
 - Hardcoded `DOC_TYPES` array in `fa-frontend/src/views/ledger/SourceDocs.vue` — should follow the
   existing configurable document-numbering pattern (`shared/codegen`) instead of a literal array.
+
+**New — confirmed pre-existing bug, normal priority, not blocking (surfaced while building the
+credit-notes endpoint):** `InvoiceService.kt:574-575` — `findByEntity()`'s `when` branches on
+`customerId != null` before `status != null`, so if a caller supplies both a `customerId` and a
+`status` filter, the `status` filter is silently dropped (the `customerId` branch wins and returns
+all statuses for that customer). Needs a combined-filter repository method (e.g.
+`findByEntityIdAndCustomerIdAndStatus`) eventually. The new `findCreditNotesByEntity()` added in
+`8eeee49` deliberately bypasses this method for that reason rather than compounding the bug — see
+"RESOLVED — standalone credit-notes endpoint" above. Log and track; not urgent.
 
 **New — pre-existing backend test-suite issues (surfaced by this session's full `mvn clean test`
 runs, not caused by this session's work, confirmed present before and after):**
@@ -205,16 +279,24 @@ runs, not caused by this session's work, confirmed present before and after):**
   changes like 14%→16% VAT without corrupting history).
 - Single-open-period control is the intended design (per BUG-25's severity as *critical*) — multiple
   concurrently open periods is a defect, not a feature. Confirmed genuinely enforced today, verified
-  by actually running it under Financial Systems Architect review (see Known Issues); recommend
-  adding a permanent regression test to lock it in, since the verification test used was temporary.
+  by actually running it under Financial Systems Architect review, and now locked in permanently by
+  a real regression test in `PeriodServiceTest.kt` (`ac7da9c`) — see Known Issues.
 
 ## Open Risks / Blockers
 
+- **TOP PRIORITY — IN PROGRESS (fix cycle started): codebase-wide IDOR / cross-entity data-isolation
+  gap.** Only 3 of the controllers accepting a client-supplied `entityId` (`OrganizationController`,
+  `ApiKeyController`, `UserController`) verify it against the authenticated user's own entity; the
+  rest — including `JournalController`, `LedgerController`, `TrialBalanceController`,
+  `InvoiceController`, `BillController`, `AssetController`, `CreditNoteController`, and more — do not,
+  meaning an authenticated user could potentially read another entity's financial data by supplying a
+  different `entityId`. Real, severe, pre-existing (not introduced this session), and now the highest
+  priority open item in this file per CLAUDE.md's correctness > security ordering. See Known Issues
+  (top) and Next Recommended Action (top) for status.
 - Fiscal-year default/context-switch/switcher-UI bugs (BUG-24/27/34) are now fixed and verified (see
   Known Issues) — **removed** from this list. BUG-25 (multiple concurrent `OPEN` periods) is also
-  **removed** from this list — verified genuinely enforced by an actual (if temporary) test run; the
-  residual risk is narrower than "is it broken" — it's "no permanent regression test locks this in
-  yet" (see Known Issues follow-up item).
+  **removed** from this list — verified genuinely enforced, and now locked in by a permanent
+  regression test (`ac7da9c`) — no residual risk remains for this item.
 - Synchronous batch operations (depreciation, FX revaluation) will not scale and block the request
   thread — a real constraint once transaction volume grows, tracked for Phase 0/3.
 - M-Pesa callback handling uses sentinel UUIDs in place of a real session table — **not production
@@ -226,42 +308,67 @@ runs, not caused by this session's work, confirmed present before and after):**
 
 ## Outstanding Reviews
 
-- **Period management (BUG-24/25/27/34) and ApiKeys wiring: both now have recorded Engineering +
-  Accounting sign-off**, per AGENTS.md's Definition of Completion — this is the first module actually
-  taken through the full governance gate end to end (two Financial Systems Architect review passes:
-  first pass found 3 real defects and did not approve, but *also* independently verified BUG-25's
-  single-open-period enforcement by running a real test against it; second pass, after fixes,
-  independently re-derived every claim from current file contents, re-ran `mvn clean test` (JDK 21)
-  and `npm run build`, and gave final verdict **APPROVED end-to-end** for both).
-- Follow-up owed (small, non-blocking): add a permanent `PERIOD_ALREADY_OPEN` regression test to
-  `PeriodServiceTest.kt` — the behavior is verified correct today, but the test that proved it was
-  temporary and was deleted after the review run.
+- **TOP PRIORITY — IDOR fix cycle starting now.** A dedicated Engineering fix pass across the ~20
+  affected controllers begins immediately following this update, each fix routing through Accounting
+  review wherever the controller touches money/postings/periods per CLAUDE.md §17 (e.g.
+  `JournalController`, `LedgerController`, `TrialBalanceController`, `InvoiceController`,
+  `BillController`, `AssetController`, `CreditNoteController` all qualify). No individual controller
+  fix in this cycle may be marked `COMPLETE` without both Engineering and Accounting sign-off recorded
+  here, same as every other module.
+- **BUG-25 permanent regression test (`ac7da9c`) and standalone credit-notes endpoint (`8eeee49`):
+  both now have recorded Engineering + Accounting sign-off**, per AGENTS.md's Definition of
+  Completion. BUG-25: Financial Systems Architect proved the new test is a real regression test (not
+  a tautology) by disabling the guard in `PeriodService.kt`, confirming the test failed, restoring the
+  original code, confirming `git diff` was empty, and confirming the test passed again. **APPROVED.**
+  Credit-notes: Financial Systems Architect independently verified the `CREDIT_NOTE` enum distinction,
+  the pre-existing-bug bypass (see `InvoiceService.kt:574-575` in Known Issues), real (non-mocked
+  beyond the repository) tests, and genuine frontend wiring to the authenticated user's real
+  `entityId`. **APPROVED.**
+- **Period management (BUG-24/25/27/34) and ApiKeys wiring: recorded Engineering + Accounting
+  sign-off**, per AGENTS.md's Definition of Completion — the first module taken through the full
+  governance gate end to end (two Financial Systems Architect review passes: first pass found 3 real
+  defects and did not approve, but *also* independently verified BUG-25's single-open-period
+  enforcement by running a real test against it; second pass, after fixes, independently re-derived
+  every claim from current file contents, re-ran `mvn clean test` (JDK 21) and `npm run build`, and
+  gave final verdict **APPROVED end-to-end** for both).
+- Old ROADMAP.md "Tier 1" gap list: no sign-off needed — this was a documentation-only correction
+  (re-verification found no defect to fix), not a completed unit of engineering/accounting work.
 - No formal Engineering or Accounting sign-off exists yet for any *other* module under the new
   governance model (the product was built before this framework was adopted) — treat those modules as
   **provisionally accepted** (working, documented, IFRS-cited) but not formally gated per AGENTS.md
-  until they're touched again, at which point the full gate applies.
+  until they're touched again, at which point the full gate applies. **Note:** the IDOR finding above
+  means "provisionally accepted" for ~20 of those modules specifically includes a known, unresolved
+  security gap, not just an unreviewed-but-presumed-fine state — do not read "provisionally accepted"
+  as "no known issues" for those controllers until the fix cycle closes them out.
 
 ## Next Recommended Action
 
-Uncommitted-work reconciliation and the BUG-24/25/27/34 period-management fixes are done and
-verified (see above). Real remaining Phase 0 work:
+Uncommitted-work reconciliation, the BUG-24/25/27/34 period-management fixes, the BUG-25 permanent
+regression test, and the standalone credit-notes endpoint are all done and verified (see above). The
+old ROADMAP.md "Tier 1" list is confirmed already resolved in current code — no action needed there.
+Real remaining Phase 0 work, in priority order:
 
-1. Add a permanent `PERIOD_ALREADY_OPEN` regression test to `PeriodServiceTest.kt` — quick, closes
-   the one residual gap from the BUG-25 verification (behavior confirmed correct, but only by a
-   temporary test).
-2. Close the confirmed Tier 1 gaps: missing `PUT` endpoints for FX currencies, exchange rates, tax
-   codes, and fixed assets; comparative trial balance implementation; organization RBAC fix for
-   entity-scoped `SYSTEM_ADMIN`.
-3. Close Tier 2 workflow gaps: standalone credit-notes list endpoint, closing-preview endpoint,
-   source-document restore (un-void), IFRS 15 over-time revenue recognition period-end job.
-4. Close Tier 3 infrastructure gaps: wire the Spring Batch pipeline so depreciation/FX revaluation
+1. **TOP PRIORITY, fix cycle starting now:** codebase-wide IDOR fix — audit and correct all ~20
+   controllers that accept a client-supplied `entityId` without verifying it against the
+   authenticated user's own entity (`JournalController`, `LedgerController`,
+   `TrialBalanceController`, `InvoiceController`, `BillController`, `AssetController`,
+   `CreditNoteController`, and the rest), bringing them up to the pattern already correctly used by
+   `OrganizationController`, `ApiKeyController`, and `UserController`. This ranks above all remaining
+   Tier 2/3 feature work per CLAUDE.md's correctness > security priority ordering — see Known Issues
+   and Open Risks/Blockers (both top item) and `workplan.md` Phase 0.
+2. Close Tier 2 remaining workflow gap: IFRS 15 over-time revenue recognition period-end recognition
+   job (point-in-time works; the other Tier 2 items — standalone credit-notes endpoint,
+   closing-preview, source-document restore — are now resolved, see above).
+3. Close Tier 3 infrastructure gaps: wire the Spring Batch pipeline so depreciation/FX revaluation
    run asynchronously; seed COA template data for the signup wizard; build the M-Pesa STK-push
    session table (replace sentinel UUIDs).
-5. New backlog surfaced this session (not urgent, but log-and-track per CLAUDE.md §2): consolidate
-   the three hardcoded-category violations (`PAYMENT_TERMS`, `PAYMENT_METHODS`, `DOC_TYPES` — see
-   Known Issues) into a dynamic-management screen; restore or delete the two fully-commented-out test
-   files (`InvoiceServiceTest.kt`, `ReceiptServiceTest.kt`); investigate/fix the two pre-existing
-   backend test failures (`UserServiceTest`, `CoreAccountingIntegrationTest`).
+4. Normal-priority backlog: fix `InvoiceService.kt:574-575`'s `findByEntity()` filter-priority bug
+   (status filter silently dropped when both `customerId` and `status` are supplied — needs a
+   combined-filter repository method); consolidate the three hardcoded-category violations
+   (`PAYMENT_TERMS`, `PAYMENT_METHODS`, `DOC_TYPES` — see Known Issues) into a dynamic-management
+   screen; restore or delete the two fully-commented-out test files (`InvoiceServiceTest.kt`,
+   `ReceiptServiceTest.kt`); investigate/fix the two pre-existing backend test failures
+   (`UserServiceTest`, `CoreAccountingIntegrationTest`).
 
 ## Lessons Learned
 
@@ -277,3 +384,13 @@ verified (see above). Real remaining Phase 0 work:
   Financial Systems Architect insisted on actually running `mvn test`, not reading the diff and
   reasoning about it. This is exactly why AGENTS.md's "run it, don't read it" mandate for Agent 2
   exists, and this session is the concrete case that validates keeping it non-negotiable.
+- The IDOR finding was surfaced by a **second-order** review: the reviewer didn't just check the new
+  `CreditNoteController` against its own spec (it passed that check cleanly), it also checked the new
+  controller against its *siblings* — the pattern used by the 3 controllers that do verify `entityId`
+  correctly — per AGENTS.md's "regression-check peer features, not just the change itself" mandate.
+  That comparison is what surfaced a systemic, codebase-wide gap that a narrower review (does this one
+  new endpoint work correctly in isolation? yes) would have missed entirely, because the new
+  controller was individually "correct" relative to its own feature spec while still reproducing a
+  severe pre-existing defect shared by ~20 other controllers. This validates why the peer-comparison
+  step in AGENTS.md's Agent 2 checklist is mandatory rather than optional, and why "hold existing work
+  to the same bar once touched" matters even when the touched code itself looks fine.
