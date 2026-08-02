@@ -2,7 +2,11 @@ import { ref, computed } from 'vue'
 import { periods as periodsApi } from '@/api/index.js'
 import { useAuth } from '@/composables/useAuth.js'
 
-const STATUS_PRIORITY = ['ADJUSTING', 'CLOSING', 'OPEN', 'REOPENED', 'CLOSED']
+// Only these statuses represent a period the entity is *currently* working in.
+// FUTURE (not yet begun), REOPENED (a past, already-closed period reopened for a
+// one-off correction), and CLOSED (finalized/historical) are deliberately excluded —
+// none of them should be surfaced as "the active period" on the dashboard/reports.
+const STATUS_PRIORITY = ['ADJUSTING', 'CLOSING', 'OPEN']
 
 function priorityOf(status) {
   const i = STATUS_PRIORITY.indexOf(status)
@@ -29,7 +33,12 @@ const _activePeriod = computed(() => {
   const pool = _selectedFY.value
     ? _periods.value.filter(p => (p.startDate ?? '').startsWith(_selectedFY.value))
     : _periods.value
-  const candidates = pool.length ? pool : _periods.value
+  const scoped = pool.length ? pool : _periods.value
+  // Only OPEN/ADJUSTING/CLOSING periods qualify as "active" — a freshly generated
+  // fiscal year (all FUTURE, per BUG-27's fix) or a year that's fully CLOSED/only
+  // has a REOPENED correction in progress must yield null, not an arbitrary pick.
+  const candidates = scoped.filter(p => STATUS_PRIORITY.includes(p.status))
+  if (!candidates.length) return null
   const sorted = [...candidates].sort((a, b) => priorityOf(a.status) - priorityOf(b.status))
   const p = sorted[0]
   // Normalize a `code` field (YYYY-MM) from startDate for AppTopbar compatibility

@@ -474,7 +474,7 @@ const steps = [
           <div class="card-head">
             <Ico name="ledger" :size="13" /> Trial Balance Health
             <span class="fy-badge">FY{{ tbFY }}</span>
-            <div class="h-meta">{{ activePeriod?.periodName ?? activePeriod?.code ?? 'Current period' }}</div>
+            <div class="h-meta">{{ activePeriod?.periodName ?? activePeriod?.code ?? 'No active period' }}</div>
           </div>
           <div class="card-body stack" style="gap:14px">
             <div v-if="tbLoading" class="section-skeleton" style="height:120px" />
