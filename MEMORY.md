@@ -1,6 +1,7 @@
 # MEMORY.md — Project Memory
 
-**Last updated:** 2026-08-02 (baseline established — governance framework adopted this date)
+**Last updated:** 2026-08-02 (Phase 0 period-management fix + ApiKeys wiring taken through full
+governance gate — first module to complete Engineering + Accounting sign-off under this model)
 
 This is the single source of truth for "where things stand." Every completed unit of work updates
 this file per AGENTS.md's Delivery Manager responsibilities. See [workplan.md](workplan.md) for the
@@ -71,34 +72,60 @@ outward domain by domain per `workplan.md`, rather than attempting all six domai
 
 ---
 
-## Modules In Progress (Uncommitted, as of 2026-08-02)
+## Modules In Progress — RESOLVED
 
-Working tree has uncommitted changes that predate this governance baseline — **do not discard
-without review**:
-- Auth pages redesign: `Login.vue`, `Signup.vue`, `ForgotPassword.vue` substantially rewritten; new
-  `fa-frontend/src/assets/auth-bg.jpg` (untracked) and `base.css` changes — appears to be a visual
-  redesign of the auth flow, not yet committed.
-- `fa-frontend/src/api/users.js`: `apiKeys()` now accepts query params, `revokeApiKey()` now accepts
-  a `reason` parameter — paired with `ApiKeys.vue` changes (212 lines changed) that likely add a
-  revoke-reason UI and key filtering.
-- Deleted (uncommitted) from working tree: `ROADMAP.md`, `BUG_REPORT.md`, `BUG_REPORT_V2.md`. Their
-  content has been folded into this file and `workplan.md` below — nothing is lost; still
-  recoverable via `git show HEAD:<file>` if deeper detail is needed. These three files should be
-  considered **superseded** by `MEMORY.md`/`workplan.md` going forward, not restored.
+The uncommitted-work reconciliation flagged at baseline is resolved: everything that was sitting in
+the working tree has now been committed to `main`, in this order:
+- `c78b701` — governance docs adopted (`CLAUDE.md`, `AGENTS.md`, `MEMORY.md`, `SKILLS.md`,
+  `workplan.md`, `Project.md` added; `ROADMAP.md`/`BUG_REPORT.md`/`BUG_REPORT_V2.md` deletions
+  committed — content already folded forward, recoverable via `git show f75f61b:<file>` if deeper
+  historical detail is ever needed).
+- `84535d9` — auth pages redesign (`Login.vue`, `Signup.vue`, `ForgotPassword.vue`, `base.css`, new
+  `auth-bg.jpg`) — cosmetic only, no business/API logic touched, so per CLAUDE.md §16.5 this needed
+  only Engineering sign-off, which it has (build verified clean).
+- `f9801ca` — ApiKeys view wired to real endpoints with revoke-reason and filtering (`users.js`,
+  `ApiKeys.vue`) — Financial Systems Architect independently re-derived the wiring and confirmed it
+  is real (**APPROVED**).
+- `7084460`, `6cf3261`, `dde9c5c`, `5e2f87b` — period-management fix, see "Known Issues" and
+  "Outstanding Reviews" below for the full account.
 
-**Recommended first action:** review and commit (or intentionally discard) the auth redesign and
-ApiKeys.vue changes before starting new Phase 0 work, so the working tree is clean.
+Working tree is clean as of this update (aside from an untracked, out-of-scope
+`fa-frontend/package-lock.json`).
 
 ## Known Issues / Technical Debt
 
-Carried forward from the (uncommitted-deleted) internal gap analysis and bug reports. Not yet
-re-verified against current `HEAD` — first Phase 0 task is to confirm which are still open.
+Carried forward from the (uncommitted-deleted) internal gap analysis and bug reports, re-verified
+where noted below. First Phase 0 task was to confirm which are still open — see the
+period-management line below for the result.
 
-**Critical (from BUG_REPORT_V2, unverified against current code):**
-- Periods module: fiscal-year generation defaulted to a nonsensical year (BUG-24); system allowed
-  multiple concurrent `OPEN` periods, violating the single-open-period accounting control (BUG-25);
-  generating a historical fiscal year silently switched the user's working context away from the
-  current year (BUG-27); no explicit fiscal-year switcher UI (BUG-34).
+**RESOLVED — Periods module (BUG-24/27/34), confirmed fixed and verified end-to-end:**
+Fiscal-year generation defaulting to a nonsensical year (BUG-24), silent working-context switching
+on historical fiscal-year generation (BUG-27), and the missing fiscal-year switcher UI (BUG-34) are
+fixed as of commits `7084460`/`dde9c5c`/`5e2f87b`, confirmed by the Financial Systems Architect's
+two-pass review (first pass rejected the initial fix; second pass, after corrections, independently
+re-derived every claim from current file contents and re-ran `mvn clean test` + `npm run build`,
+verdict **APPROVED end-to-end**). Detail:
+- The Swagger docs claiming January auto-opens were themselves stale/false — the actual code already
+  correctly set all 12 periods to `FUTURE` (a pre-existing fix predating this session); the docs were
+  corrected to match reality, not the behavior.
+- `Periods.vue`'s fiscal-year default made data-driven instead of hardcoded (BUG-24); a
+  dynamically-populated fiscal-year filter plus a persistent "Active period" banner added (BUG-34);
+  misleading modal copy fixed.
+- First review pass caught 3 real defects and did not approve: `PeriodServiceTest.kt` and
+  `PeriodControllerTest.kt` still asserted the **old buggy** behavior (a genuine pre-existing
+  test-suite gap, only caught because the reviewer ran `mvn test`, not just `mvn compile`);
+  `PeriodService.kt`'s duplicate-fiscal-year guard threw `ValidationException` (400) instead of the
+  documented `ConflictException` (409); and a real regression in `useActivePeriod.js`, which returned
+  a `FUTURE` period as "active" when none is actually `OPEN`/`ADJUSTING`/`CLOSING` — unreachable
+  before this fix (January always auto-opened) but exposed by the correct BUG-27 fix. All three were
+  corrected and re-verified in the second pass; `Dashboard.vue`'s fallback copy was corrected to
+  match the `useActivePeriod.js` fix.
+- BUG-25 (multiple concurrent `OPEN` periods) was **not** part of this session's re-verification
+  scope — still carried forward as unverified against current `HEAD` below.
+
+**Critical (from BUG_REPORT_V2, still unverified against current code):**
+- Periods module: system allowed multiple concurrent `OPEN` periods, violating the single-open-period
+  accounting control (BUG-25) — not re-tested this session, do not assume fixed.
 - Journal Entries: critical issue logged as BUG-29 (detail not preserved in this summary — see
   `git show HEAD:BUG_REPORT_V2.md` for full text).
 - Comparative Trial Balance: critical issue BUG-33, consistent with the confirmed stub gap below.
@@ -123,6 +150,28 @@ ready overall):**
   impairment, IAS 37 provisions, IAS 38 intangibles amortisation, consolidation/intercompany
   elimination, bank reconciliation, payroll journal import, role-level data filters below
   entity-level isolation.
+
+**New — hardcoded-category violations of CLAUDE.md §2's configuration-driven principle (surfaced
+during this session's work, not fixed, not blocking, candidates for a future dynamic-management
+screen):**
+- Duplicated `PAYMENT_TERMS` arrays hardcoded in `fa-frontend/src/views/parties/Suppliers.vue` and
+  `fa-frontend/src/views/parties/Customers.vue`.
+- Duplicated/inconsistent `PAYMENT_METHODS` arrays hardcoded in
+  `fa-frontend/src/views/payables/Bills.vue`, `fa-frontend/src/views/revenue/Payments.vue`, and
+  `fa-frontend/src/views/revenue/Invoices.vue`.
+- Hardcoded `DOC_TYPES` array in `fa-frontend/src/views/ledger/SourceDocs.vue` — should follow the
+  existing configurable document-numbering pattern (`shared/codegen`) instead of a literal array.
+
+**New — pre-existing backend test-suite issues (surfaced by this session's full `mvn clean test`
+runs, not caused by this session's work, confirmed present before and after):**
+- Two pre-existing, unrelated test failures: `UserServiceTest.registerUser creates
+  PENDING_VERIFICATION user for non-first registration`, and `CoreAccountingIntegrationTest` (H2
+  rejects the reserved SQL word `year` in the `code_sequences` table — an H2-test-dialect issue, not
+  necessarily a production Postgres issue, but unverified either way).
+- Two backend test files entirely commented out end-to-end, including their `package` declarations,
+  silently contributing 0 tests to every run:
+  `fa-backend/src/test/kotlin/com/qesuite/accounting/invoicing/service/InvoiceServiceTest.kt` and
+  `fa-backend/src/test/kotlin/com/qesuite/accounting/receipts/service/ReceiptServiceTest.kt`.
 
 ## Architectural Decisions
 
@@ -150,33 +199,54 @@ ready overall):**
 
 ## Open Risks / Blockers
 
-- Uncommitted working-tree changes (see above) risk being lost or silently overwritten if not
-  reconciled before other work starts.
-- Critical accounting-control bugs (single-open-period, fiscal-year defaults) are unverified against
-  current `HEAD` — until re-confirmed, treat period management as **not yet trustworthy** for
-  production use.
+- Fiscal-year default/context-switch/switcher-UI bugs (BUG-24/27/34) are now fixed and verified (see
+  Known Issues) — **removed** from this list. BUG-25 (multiple concurrent `OPEN` periods) remains
+  unverified against current `HEAD` and stays on this list: until re-confirmed, treat that specific
+  control as **not yet trustworthy** for production use.
 - Synchronous batch operations (depreciation, FX revaluation) will not scale and block the request
   thread — a real constraint once transaction volume grows, tracked for Phase 0/3.
 - M-Pesa callback handling uses sentinel UUIDs in place of a real session table — **not production
   safe** for real M-Pesa integration until Phase 0/workplan item is resolved.
+- Two backend test files (`InvoiceServiceTest.kt`, `ReceiptServiceTest.kt`) are entirely commented
+  out, contributing 0 tests silently — invoicing and receipts have no automated regression coverage
+  today despite `mvn test` reporting green; do not read a passing test run as proof those modules are
+  covered.
 
 ## Outstanding Reviews
 
-- Financial Systems Architect review has not yet been run against current `HEAD` for the period
-  management critical bugs above — first accounting review owed once Phase 0 fixes land.
-- No formal Engineering or Accounting sign-off exists yet for any module under the new governance
-  model (the product was built before this framework was adopted) — treat existing modules as
+- **Period management (BUG-24/27/34) and ApiKeys wiring: both now have recorded Engineering +
+  Accounting sign-off**, per AGENTS.md's Definition of Completion — this is the first module actually
+  taken through the full governance gate end to end (two Financial Systems Architect review passes:
+  first pass found 3 real defects and did not approve; second pass, after fixes, independently
+  re-derived every claim from current file contents, re-ran `mvn clean test` (JDK 21) and
+  `npm run build`, and gave final verdict **APPROVED end-to-end** for both).
+- BUG-25 (multiple concurrent `OPEN` periods) still has no Financial Systems Architect review against
+  current `HEAD` — owed as a follow-up, not covered by this session's period-management approval.
+- No formal Engineering or Accounting sign-off exists yet for any *other* module under the new
+  governance model (the product was built before this framework was adopted) — treat those modules as
   **provisionally accepted** (working, documented, IFRS-cited) but not formally gated per AGENTS.md
   until they're touched again, at which point the full gate applies.
 
 ## Next Recommended Action
 
-1. Reconcile uncommitted working-tree changes (commit or discard the auth redesign + ApiKeys.vue
-   changes, with user confirmation).
-2. Re-verify the critical period-management bugs (BUG-24/25/27/34) against current `HEAD` — Agent 2
-   review required given these are accounting-control violations, not cosmetic issues.
-3. Begin Phase 0 of `workplan.md`: close the confirmed Tier 1 API gaps (missing PUT endpoints,
-   comparative trial balance, organization RBAC fix).
+Uncommitted-work reconciliation and the BUG-24/27/34 period-management fixes are done (see above).
+Real remaining Phase 0 work:
+
+1. Re-verify BUG-25 (multiple concurrent `OPEN` periods) against current `HEAD` — still unverified,
+   still the highest-priority remaining accounting-control item.
+2. Close the confirmed Tier 1 gaps: missing `PUT` endpoints for FX currencies, exchange rates, tax
+   codes, and fixed assets; comparative trial balance implementation; organization RBAC fix for
+   entity-scoped `SYSTEM_ADMIN`.
+3. Close Tier 2 workflow gaps: standalone credit-notes list endpoint, closing-preview endpoint,
+   source-document restore (un-void), IFRS 15 over-time revenue recognition period-end job.
+4. Close Tier 3 infrastructure gaps: wire the Spring Batch pipeline so depreciation/FX revaluation
+   run asynchronously; seed COA template data for the signup wizard; build the M-Pesa STK-push
+   session table (replace sentinel UUIDs).
+5. New backlog surfaced this session (not urgent, but log-and-track per CLAUDE.md §2): consolidate
+   the three hardcoded-category violations (`PAYMENT_TERMS`, `PAYMENT_METHODS`, `DOC_TYPES` — see
+   Known Issues) into a dynamic-management screen; restore or delete the two fully-commented-out test
+   files (`InvoiceServiceTest.kt`, `ReceiptServiceTest.kt`); investigate/fix the two pre-existing
+   backend test failures (`UserServiceTest`, `CoreAccountingIntegrationTest`).
 
 ## Lessons Learned
 
@@ -186,3 +256,9 @@ ready overall):**
 - The gap between "well-built accounting core" and "Oracle Fusion competitor" is enormous — framing
   every future request against the six-domain gap table above prevents overpromising scope in any
   single session.
+- The period-management review process caught a real gap that a compile-only check would have
+  missed: `PeriodServiceTest.kt`/`PeriodControllerTest.kt` still asserted the *old, buggy* behavior
+  after the fix landed, and `mvn compile` alone would have shown green. It was only caught because the
+  Financial Systems Architect insisted on actually running `mvn test`, not reading the diff and
+  reasoning about it. This is exactly why AGENTS.md's "run it, don't read it" mandate for Agent 2
+  exists, and this session is the concrete case that validates keeping it non-negotiable.

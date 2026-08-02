@@ -25,11 +25,15 @@ Manager memory update — no phase is "done" without all three).
 **Goal:** Clean baseline, governance in effect, confirmed defects resolved, before any new domain
 work begins.
 
-- Reconcile uncommitted working-tree changes (auth page redesign, ApiKeys.vue enhancements) — get
-  user decision to commit or discard, don't leave them in limbo.
-- Re-verify and fix the critical accounting-control bugs carried forward in MEMORY.md: single-open-
-  period enforcement (BUG-25), fiscal-year generation defaults (BUG-24), fiscal-year context
-  switching (BUG-27), fiscal-year switcher UI (BUG-34).
+- [DONE] Reconcile uncommitted working-tree changes (auth page redesign, ApiKeys.vue enhancements) —
+  all committed to `main`; see MEMORY.md "Modules In Progress — RESOLVED" for commit references.
+- [DONE] Re-verify and fix fiscal-year generation defaults (BUG-24), fiscal-year context switching
+  (BUG-27), fiscal-year switcher UI (BUG-34) — fixed and Engineering + Accounting approved
+  (two-pass Financial Systems Architect review); see MEMORY.md "Known Issues" for detail. **BUG-25**
+  (single-open-period enforcement) is **not** done — still unverified against current `HEAD`, remains
+  open below.
+- Re-verify and fix BUG-25 — system allowed multiple concurrent `OPEN` periods, violating the
+  single-open-period accounting control; not yet re-tested this session.
 - Close the confirmed Tier 1 API gaps: `PUT` endpoints for FX currencies, exchange rates, tax codes,
   fixed assets; comparative trial balance implementation; organization RBAC fix for entity-scoped
   `SYSTEM_ADMIN`.
@@ -40,6 +44,20 @@ work begins.
 - Seed COA template data so the signup wizard works end-to-end.
 - Build the M-Pesa STK-push session table (replace sentinel UUIDs) if M-Pesa remains a target
   integration.
+- **Configuration-driven-principle backlog (CLAUDE.md §2), first concrete instances found this
+  session** — candidates for a dynamic-management screen, same pattern as `shared/codegen`:
+  - Duplicated `PAYMENT_TERMS` arrays hardcoded in `Suppliers.vue` and `Customers.vue`.
+  - Duplicated/inconsistent `PAYMENT_METHODS` arrays hardcoded in `Bills.vue`, `Payments.vue`, and
+    `Invoices.vue`.
+  - Hardcoded `DOC_TYPES` array in `SourceDocs.vue` — should follow the configurable
+    document-numbering pattern instead.
+- **Test-suite health backlog** — infrastructure hardening; arguably blocks confidently claiming any
+  future module is fully verified until addressed:
+  - Two pre-existing backend test failures (unrelated to any work this session): `UserServiceTest`
+    (non-first-registration case) and `CoreAccountingIntegrationTest` (H2 rejects reserved word
+    `year` in `code_sequences`).
+  - Two backend test files entirely commented out end-to-end, silently contributing 0 tests:
+    `InvoiceServiceTest.kt` and `ReceiptServiceTest.kt`.
 
 **Exit criteria:** All Phase 0 items have Engineering approval; every item touching postings,
 periods, or reports additionally has Accounting approval; MEMORY.md reflects a clean, current
@@ -171,11 +189,14 @@ transactional guarantees.
 
 ## Immediate Next Actions (Top of Backlog)
 
-1. User decision on the uncommitted auth-page redesign and ApiKeys.vue changes (commit vs. discard).
-2. Agent 2 (Accounting) re-verification of the single-open-period and fiscal-year-default bugs —
-   these are accounting-control defects, treated as highest priority in Phase 0.
-3. Delivery Manager to break down the remaining Phase 0 items into individually trackable tasks in
-   the next working session.
+1. Agent 2 (Accounting) re-verification of BUG-25 (single-open-period enforcement) — the one
+   accounting-control defect from the original bug list not yet re-tested; fiscal-year-default
+   (BUG-24/27/34) is done, see MEMORY.md.
+2. Close the confirmed Tier 1 API gaps (missing `PUT` endpoints, comparative trial balance,
+   organization RBAC fix) — next largest block of Phase 0 work.
+3. Delivery Manager to break down the remaining Phase 0 items (Tier 2/3 gaps, the three
+   hardcoded-category backlog items, and the test-suite-health backlog item) into individually
+   trackable tasks in the next working session.
 
 ## How This Plan Is Maintained
 
