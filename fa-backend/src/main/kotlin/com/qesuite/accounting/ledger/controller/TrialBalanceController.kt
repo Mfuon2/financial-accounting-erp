@@ -3,6 +3,7 @@ package com.qesuite.accounting.ledger.controller
 import com.qesuite.accounting.ledger.service.TrialBalanceReport
 import com.qesuite.accounting.ledger.service.TrialBalanceService
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
@@ -87,6 +88,7 @@ adjusted position before generating financial statements.
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
         @Parameter(description = "Point-in-time date for balance aggregation (ISO 8601). Defaults to today.", example = "2026-03-31") asOfDate: LocalDate?
     ): ApiResponse<TrialBalanceReport> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(trialBalanceService.generateTrialBalance(entityId, asOfDate))
     }
 
@@ -107,6 +109,7 @@ adjusted position before generating financial statements.
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
         @Parameter(description = "Prior period end date for comparison", example = "2026-01-31") compareAsOfDate: LocalDate
     ): ApiResponse<com.qesuite.accounting.ledger.service.ComparativeTrialBalanceReport> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(trialBalanceService.generateComparative(entityId, asOfDate, compareAsOfDate))
     }
 }

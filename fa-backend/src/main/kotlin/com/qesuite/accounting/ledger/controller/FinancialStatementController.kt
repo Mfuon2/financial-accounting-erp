@@ -7,6 +7,7 @@ import com.qesuite.accounting.ledger.service.FinancialStatementService
 import com.qesuite.accounting.ledger.service.ProfitLossReport
 import com.qesuite.accounting.shared.exceptions.ApiResponse
 import com.qesuite.accounting.shared.pdf.PdfReportService
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
@@ -108,6 +109,7 @@ accounts view (unaudited interim position).
         )
         asOfDate: LocalDate?
     ): ApiResponse<BalanceSheetReport> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(financialStatementService.getBalanceSheet(entityId, asOfDate))
     }
 
@@ -155,6 +157,7 @@ with the current and prior year date ranges.
         @Parameter(description = "Period end date (inclusive, ISO 8601)", example = "2026-03-31")
         endDate: LocalDate
     ): ApiResponse<ProfitLossReport> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(financialStatementService.getProfitLoss(entityId, startDate, endDate))
     }
 
@@ -210,6 +213,7 @@ All monetary amounts are scaled to 6 decimal places (HALF_EVEN rounding).
         @Parameter(description = "Period end date (inclusive, ISO 8601)", example = "2026-03-31")
         endDate: LocalDate
     ): ApiResponse<CashFlowReport> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(
             cashFlowService.generateIndirectCashFlow(entityId, periodId, startDate, endDate)
         )
@@ -226,6 +230,7 @@ All monetary amounts are scaled to 6 decimal places (HALF_EVEN rounding).
         @RequestParam entityId: UUID,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) asOfDate: LocalDate?
     ): ResponseEntity<ByteArray> {
+        SecurityUtils.requireOwnEntity(entityId)
         val report = financialStatementService.getBalanceSheet(entityId, asOfDate)
         val pdf = pdfReportService.balanceSheet(report)
         return ResponseEntity.ok()
@@ -242,6 +247,7 @@ All monetary amounts are scaled to 6 decimal places (HALF_EVEN rounding).
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startDate: LocalDate,
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) endDate: LocalDate
     ): ResponseEntity<ByteArray> {
+        SecurityUtils.requireOwnEntity(entityId)
         val report = financialStatementService.getProfitLoss(entityId, startDate, endDate)
         val pdf = pdfReportService.profitLoss(report)
         return ResponseEntity.ok()
@@ -259,6 +265,7 @@ All monetary amounts are scaled to 6 decimal places (HALF_EVEN rounding).
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startDate: LocalDate,
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) endDate: LocalDate
     ): ResponseEntity<ByteArray> {
+        SecurityUtils.requireOwnEntity(entityId)
         val report = cashFlowService.generateIndirectCashFlow(entityId, periodId, startDate, endDate)
         val pdf = pdfReportService.cashFlow(report)
         return ResponseEntity.ok()

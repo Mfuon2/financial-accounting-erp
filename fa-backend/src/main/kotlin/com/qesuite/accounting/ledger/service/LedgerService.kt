@@ -43,6 +43,24 @@ class LedgerService(
             .orElseThrow { ResourceNotFoundException("LEDGER_ENTRY_NOT_FOUND", id, "Ledger Entry") }
 
     // -------------------------------------------------------------------------
+    // §18 — IDOR guard support: resolve the owning entityId for a resource that's
+    // looked up by its own ID (no entityId param on the endpoint), so the controller
+    // can call SecurityUtils.requireOwnEntity(...) before returning/mutating data.
+    // -------------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    fun findAccountEntityId(accountId: UUID): UUID =
+        accountRepository.findById(accountId)
+            .orElseThrow { ResourceNotFoundException("ACCOUNT_NOT_FOUND", accountId, "Account") }
+            .entityId
+
+    @Transactional(readOnly = true)
+    fun findAssetEntityId(assetId: UUID): UUID =
+        fixedAssetRepository.findById(assetId)
+            .orElseThrow { ResourceNotFoundException("ASSET_NOT_FOUND", assetId, "Fixed Asset") }
+            .entityId
+
+    // -------------------------------------------------------------------------
     // §5.3 — Full chronological ledger for an account
     // -------------------------------------------------------------------------
 

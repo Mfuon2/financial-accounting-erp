@@ -4,6 +4,7 @@ import com.qesuite.accounting.ledger.domain.LedgerEntry
 import com.qesuite.accounting.ledger.service.LedgerService
 import com.qesuite.accounting.ledger.service.TAccountView
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
@@ -70,6 +71,7 @@ link back to the originating journal line for full audit traceability.
     fun getEntriesByAccount(
         @PathVariable @Parameter(description = "Account UUID to retrieve ledger entries for", example = "770e8400-e29b-41d4-a716-446655440002") accountId: UUID
     ): ApiResponse<List<LedgerEntry>> {
+        SecurityUtils.requireOwnEntity(ledgerService.findAccountEntityId(accountId))
         return ApiResponse.success(ledgerService.getEntriesByAccount(accountId))
     }
 
@@ -105,6 +107,7 @@ date range, with all debit-side movements and credit-side movements separated.
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
         @Parameter(description = "End date of the range (inclusive, ISO 8601)", example = "2026-03-31") endDate: LocalDate
     ): ApiResponse<TAccountView> {
+        SecurityUtils.requireOwnEntity(ledgerService.findAccountEntityId(accountId))
         return ApiResponse.success(ledgerService.getTAccount(accountId, startDate, endDate))
     }
 
@@ -121,7 +124,9 @@ date range, with all debit-side movements and credit-side movements separated.
     fun getById(
         @PathVariable @Parameter(description = "Ledger entry UUID") id: UUID
     ): ApiResponse<LedgerEntry> {
-        return ApiResponse.success(ledgerService.findById(id))
+        val entry = ledgerService.findById(id)
+        SecurityUtils.requireOwnEntity(entry.entityId)
+        return ApiResponse.success(entry)
     }
 
     @GetMapping("/subsidiary/customers/{customerId}")
@@ -144,6 +149,7 @@ balance on the AR control account in the Chart of Accounts.
         @PathVariable @Parameter(description = "Customer UUID (the external customer identifier)", example = "aa0e8400-e29b-41d4-a716-446655440005") customerId: UUID,
         @RequestParam @Parameter(description = "Tenant/company UUID", required = true) entityId: UUID
     ): ApiResponse<List<LedgerEntry>> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(ledgerService.getCustomerSubsidiary(customerId, entityId))
     }
 
@@ -167,6 +173,7 @@ balance on the AP control account in the Chart of Accounts.
         @PathVariable @Parameter(description = "Supplier UUID (the external supplier identifier)", example = "bb0e8400-e29b-41d4-a716-446655440006") supplierId: UUID,
         @RequestParam @Parameter(description = "Tenant/company UUID", required = true) entityId: UUID
     ): ApiResponse<List<LedgerEntry>> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(ledgerService.getSupplierSubsidiary(supplierId, entityId))
     }
 
@@ -191,6 +198,7 @@ Plant and Equipment).
     fun getAssetSchedule(
         @PathVariable @Parameter(description = "Fixed asset UUID", example = "cc0e8400-e29b-41d4-a716-446655440007") assetId: UUID
     ): ApiResponse<List<Any>> {
+        SecurityUtils.requireOwnEntity(ledgerService.findAssetEntityId(assetId))
         return ApiResponse.success(ledgerService.getAssetSchedule(assetId))
     }
 
@@ -219,6 +227,7 @@ calls this internally for all assets.
     fun postDepreciation(
         @PathVariable @Parameter(description = "Fixed asset UUID to depreciate") assetId: UUID
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(ledgerService.findAssetEntityId(assetId))
         ledgerService.postDepreciation(assetId)
         return ApiResponse.success(Unit)
     }

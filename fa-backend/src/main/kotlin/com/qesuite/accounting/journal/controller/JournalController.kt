@@ -5,6 +5,7 @@ import com.qesuite.accounting.journal.service.CreateJournalEntryCommand
 import com.qesuite.accounting.journal.service.JournalService
 import com.qesuite.accounting.shared.audit.domain.AuditLog
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
@@ -74,6 +75,7 @@ Each entry includes its full list of `lines` with functional currency amounts.
     fun getAll(
         @RequestParam @Parameter(description = "Tenant/company UUID", example = "550e8400-e29b-41d4-a716-446655440000") entityId: UUID
     ): ApiResponse<List<JournalEntry>> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(journalService.getAllEntries(entityId))
     }
 
@@ -107,6 +109,7 @@ automatically (`amount × exchangeRate`) and cannot be set directly.
     fun create(
         @Valid @RequestBody command: CreateJournalEntryCommand
     ): ApiResponse<JournalEntry> {
+        SecurityUtils.requireOwnEntity(command.entityId)
         return ApiResponse.success(journalService.createEntry(command))
     }
 
@@ -126,7 +129,9 @@ their original currency amounts, exchange rates, and calculated functional curre
     fun getById(
         @PathVariable @Parameter(description = "Journal entry UUID", example = "990e8400-e29b-41d4-a716-446655440004") id: UUID
     ): ApiResponse<JournalEntry> {
-        return ApiResponse.success(journalService.findById(id))
+        val entry = journalService.findById(id)
+        SecurityUtils.requireOwnEntity(entry.entityId)
+        return ApiResponse.success(entry)
     }
 
     @PutMapping("/{id}")
@@ -153,6 +158,7 @@ not yet validated for double-entry balance.
         @PathVariable @Parameter(description = "Journal entry UUID to update") id: UUID,
         @Valid @RequestBody command: CreateJournalEntryCommand
     ): ApiResponse<JournalEntry> {
+        SecurityUtils.requireOwnEntity(journalService.findById(id).entityId)
         return ApiResponse.success(journalService.updateEntry(id, command))
     }
 
@@ -180,6 +186,7 @@ and the amounts of the imbalance.
     fun submit(
         @PathVariable @Parameter(description = "Journal entry UUID") id: UUID
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(journalService.findById(id).entityId)
         journalService.submitEntry(id)
         return ApiResponse.success(Unit)
     }
@@ -211,6 +218,7 @@ that creates `LedgerEntry` records and updates account running balances.
     fun approve(
         @PathVariable @Parameter(description = "Journal entry UUID to post") id: UUID
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(journalService.findById(id).entityId)
         journalService.postEntry(id)
         return ApiResponse.success(Unit)
     }
@@ -233,6 +241,7 @@ resubmit.
         @PathVariable @Parameter(description = "Journal entry UUID to reject") id: UUID,
         @RequestParam @Parameter(description = "Reason for rejection (recorded in audit log)", example = "Incorrect account allocation — should use 6100 not 6000") reason: String
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(journalService.findById(id).entityId)
         journalService.rejectEntry(id, reason)
         return ApiResponse.success(Unit)
     }
@@ -265,6 +274,7 @@ and `sourceId = original.id`.
     fun reverse(
         @PathVariable @Parameter(description = "Journal entry UUID to reverse") id: UUID
     ): ApiResponse<JournalEntry> {
+        SecurityUtils.requireOwnEntity(journalService.findById(id).entityId)
         return ApiResponse.success(journalService.reverseEntry(id))
     }
 
@@ -282,6 +292,7 @@ and `sourceId = original.id`.
     fun getAuditTrail(
         @PathVariable @Parameter(description = "Journal entry UUID") id: UUID
     ): ApiResponse<List<AuditLog>> {
+        SecurityUtils.requireOwnEntity(journalService.findById(id).entityId)
         return ApiResponse.success(journalService.getAuditTrail(id))
     }
 }

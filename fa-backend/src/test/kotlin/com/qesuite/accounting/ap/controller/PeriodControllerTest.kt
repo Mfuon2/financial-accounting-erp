@@ -6,6 +6,7 @@ import com.qesuite.accounting.ap.domain.PeriodStatus
 import com.qesuite.accounting.ap.service.PeriodService
 import com.qesuite.accounting.integration.service.ApiKeyService
 import com.qesuite.accounting.shared.security.JwtService
+import com.qesuite.accounting.shared.security.mockUserContext
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -15,7 +16,6 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.http.MediaType
-import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.post
@@ -40,16 +40,17 @@ class PeriodControllerTest {
     private lateinit var periodService: PeriodService
 
     @Test
-    @WithMockUser
     fun `should generate fiscal year`() {
         // Given — the controller's real contract is a JSON body (GenerateFiscalYearRequest
         // with entityId/fiscalYear fields), not request params, and not "startYear".
         val entityId = UUID.randomUUID()
         every { periodService.generateFiscalYear(entityId, 2024) } just runs
 
-        // When/Then
+        // When/Then — authenticated as a user of the SAME entity (SecurityUtils.requireOwnEntity
+        // guard added by the IDOR sweep requires a real UserContext principal, not @WithMockUser).
         mockMvc.post("/api/v1/periods/generate-fiscal-year") {
             with(csrf())
+            with(mockUserContext(entityId))
             contentType = MediaType.APPLICATION_JSON
             content = objectMapper.writeValueAsString(
                 mapOf("entityId" to entityId.toString(), "fiscalYear" to 2024)
@@ -61,15 +62,22 @@ class PeriodControllerTest {
     }
 
     @Test
-    @WithMockUser
     fun `should transition period`() {
         // Given
         val periodId = UUID.randomUUID()
+        val entityId = UUID.randomUUID()
+        val existingPeriod = Period(
+            entityId, "JANUARY 2024",
+            java.time.LocalDate.of(2024, 1, 1), java.time.LocalDate.of(2024, 1, 31),
+            PeriodStatus.FUTURE,
+        )
+        every { periodService.findById(periodId) } returns existingPeriod
         every { periodService.transitionPeriod(periodId, PeriodStatus.OPEN) } returns mockk<Period>(relaxed = true)
 
         // When/Then
         mockMvc.post("/api/v1/periods/$periodId/transition") {
             with(csrf())
+            with(mockUserContext(entityId))
             param("nextStatus", "OPEN")
         }.andExpect {
             status { isOk() }

@@ -5,6 +5,7 @@ import com.qesuite.accounting.ap.service.AccountingCycleResult
 import com.qesuite.accounting.ap.service.AccountingCycleService
 import com.qesuite.accounting.ap.service.ClosingParams
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
@@ -105,6 +106,7 @@ class AccountingCycleController(
     fun runFullCycle(
         @Valid @RequestBody request: RunCycleRequest
     ): ApiResponse<AccountingCycleResult> {
+        SecurityUtils.requireOwnEntity(request.entityId)
         val result = accountingCycleService.runFullCycle(
             entityId = request.entityId,
             periodId = request.periodId,
@@ -128,6 +130,7 @@ class AccountingCycleController(
     fun transitionPeriod(
         @Valid @RequestBody request: TransitionPeriodRequest
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(request.entityId)
         accountingCycleService.transitionPeriod(
             entityId = request.entityId,
             periodId = request.periodId,
@@ -153,6 +156,7 @@ class AccountingCycleController(
         @RequestParam periodId: UUID,
         @RequestParam targetStatus: PeriodStatus
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(entityId)
         accountingCycleService.validateStep(entityId, periodId, targetStatus)
         return ApiResponse.success(Unit)
     }

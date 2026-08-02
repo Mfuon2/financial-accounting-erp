@@ -4,6 +4,7 @@ import com.qesuite.accounting.journal.domain.JournalEntry
 import com.qesuite.accounting.journal.service.AdjustmentService
 import com.qesuite.accounting.journal.service.CreateJournalEntryCommand
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
@@ -93,6 +94,7 @@ period using `POST /journal-entries/{id}/reverse` to prevent double-counting.
     fun recordAccrual(
         @Valid @RequestBody command: CreateJournalEntryCommand
     ): ApiResponse<JournalEntry> {
+        SecurityUtils.requireOwnEntity(command.entityId)
         return ApiResponse.success(adjustmentService.recordAccrual(command))
     }
 
@@ -123,6 +125,7 @@ automatically set to `DEFERRAL`.
     fun recordDeferral(
         @Valid @RequestBody command: CreateJournalEntryCommand
     ): ApiResponse<JournalEntry> {
+        SecurityUtils.requireOwnEntity(command.entityId)
         return ApiResponse.success(adjustmentService.recordDeferral(command))
     }
 
@@ -157,6 +160,7 @@ double-count the amortisation. Ensure it is called exactly once per period.
         @RequestParam @Parameter(description = "Tenant/company UUID", example = "550e8400-e29b-41d4-a716-446655440000") entityId: UUID,
         @RequestParam @Parameter(description = "Period UUID for which to run amortisation", example = "660e8400-e29b-41d4-a716-446655440001") periodId: UUID
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(entityId)
         adjustmentService.amortizePrepayments(entityId, periodId)
         return ApiResponse.success(Unit)
     }
@@ -192,6 +196,7 @@ per period within the adjusting entries workflow.
         @RequestParam @Parameter(description = "Tenant/company UUID") entityId: UUID,
         @RequestParam @Parameter(description = "Period UUID for which to run recognition") periodId: UUID
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(entityId)
         adjustmentService.recognizeUnearnedRevenue(entityId, periodId)
         return ApiResponse.success(Unit)
     }

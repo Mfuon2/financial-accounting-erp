@@ -4,6 +4,7 @@ import com.qesuite.accounting.ap.domain.Period
 import com.qesuite.accounting.ap.domain.PeriodStatus
 import com.qesuite.accounting.ap.service.PeriodService
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -73,6 +74,7 @@ class PeriodController(private val periodService: PeriodService) {
         @Parameter(description = "Optional status filter", schema = Schema(implementation = PeriodStatus::class))
         status: PeriodStatus? = null
     ): ApiResponse<List<Period>> {
+        SecurityUtils.requireOwnEntity(entityId)
         val periods = periodService.findAllByEntity(entityId)
         val filtered = if (status != null) periods.filter { it.status == status } else periods
         return ApiResponse.success(filtered)
@@ -89,7 +91,9 @@ class PeriodController(private val periodService: PeriodService) {
         @Parameter(description = "UUID of the accounting period", example = "660e8400-e29b-41d4-a716-446655440001")
         id: UUID
     ): ApiResponse<Period> {
-        return ApiResponse.success(periodService.findById(id))
+        val period = periodService.findById(id)
+        SecurityUtils.requireOwnEntity(period.entityId)
+        return ApiResponse.success(period)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -127,6 +131,7 @@ Use this as the first setup step after onboarding a new legal entity.
     fun generateFiscalYear(
         @Valid @RequestBody request: GenerateFiscalYearRequest
     ): ApiResponse<String> {
+        SecurityUtils.requireOwnEntity(request.entityId)
         periodService.generateFiscalYear(request.entityId, request.fiscalYear)
         return ApiResponse.success("Fiscal year ${request.fiscalYear} generated successfully.")
     }
@@ -166,6 +171,7 @@ error code `INVALID_STATE_TRANSITION`.
         @Parameter(description = "Target status to transition to", schema = Schema(implementation = PeriodStatus::class))
         nextStatus: PeriodStatus
     ): ApiResponse<String> {
+        SecurityUtils.requireOwnEntity(periodService.findById(id).entityId)
         periodService.transitionPeriod(id, nextStatus)
         return ApiResponse.success("Period status transitioned to $nextStatus")
     }

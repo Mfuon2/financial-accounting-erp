@@ -1,8 +1,10 @@
 package com.qesuite.accounting.journal.controller
 
 import com.qesuite.accounting.ap.domain.PeriodStatus
+import com.qesuite.accounting.ap.service.PeriodService
 import com.qesuite.accounting.journal.service.ClosingService
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
@@ -69,7 +71,10 @@ statements are prepared — the `closePeriod` operation validates that the perio
 is in CLOSING status, which requires the financial statement workflow to be completed.
 """
 )
-class ClosingController(private val closingService: ClosingService) {
+class ClosingController(
+    private val closingService: ClosingService,
+    private val periodService: PeriodService,
+) {
 
     @GetMapping("/preview")
     @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CONTROLLER_CFO','SYSTEM_ADMIN')")
@@ -85,6 +90,7 @@ class ClosingController(private val closingService: ClosingService) {
         @RequestParam @Parameter(description = "Tenant/entity UUID") entityId: UUID,
         @RequestParam @Parameter(description = "Period UUID to preview") periodId: UUID
     ): ApiResponse<com.qesuite.accounting.journal.service.ClosingPreview> {
+        SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(closingService.previewClosing(entityId, periodId))
     }
 
@@ -133,6 +139,7 @@ attempt to locate the account with subtype `RETAINED_EARNINGS` automatically.
         @RequestParam(required = false)
         @Parameter(description = "UUID of the Income Summary account. If omitted, revenues/expenses close directly to Retained Earnings.") incomeSummaryAccountId: UUID?
     ): ApiResponse<Unit> {
+        SecurityUtils.requireOwnEntity(entityId)
         closingService.runClosing(
             entityId = entityId,
             periodId = periodId,
@@ -180,6 +187,8 @@ timestamp are all permanently recorded in the `AuditLog` table (immutable).
         @RequestParam @Parameter(description = "Period UUID to reopen", example = "660e8400-e29b-41d4-a716-446655440001") periodId: UUID,
         @RequestParam @Parameter(description = "Mandatory audit reason for the reopen (recorded permanently)", example = "Late supplier invoice Q1-2026 received after close date") reason: String
     ): ApiResponse<Unit> {
+        // No entityId param on this endpoint — resolve the period's owning entity first.
+        SecurityUtils.requireOwnEntity(periodService.findById(periodId).entityId)
         closingService.reopenPeriod(periodId, reason)
         return ApiResponse.success(Unit)
     }
