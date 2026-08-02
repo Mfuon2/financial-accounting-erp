@@ -49,6 +49,16 @@ a change is proposed to and accepted by the Delivery Manager + user).
 - OpenAPI docs updated; frontend API client updated to match.
 - No bounded-context violation (module A reaching into module B's repository directly).
 - Audit annotation (`@Auditable`) present on new business-event methods.
+- **Security and scale, backend and frontend, every time (CLAUDE.md §13–14, §16.4) — this is not
+  optional and not a one-time audit.** Any endpoint scoped by an identifier (`entityId`, a
+  looked-up resource ID, etc.) has its ownership verified against the authenticated caller, using
+  the shared `SecurityUtils` helper, not a hand-rolled check. Any new list/query endpoint is
+  paginated. Any frontend view fetching potentially large collections uses the existing
+  pagination/search primitives, and derives scoping values (like `entityId`) from the authenticated
+  session, never from client-editable state. This checklist item exists because a routine feature
+  review once surfaced a codebase-wide IDOR gap across ~24 controllers (see `MEMORY.md`) — that
+  should have been caught per-controller, at build time, not discovered later by accident. Treat
+  "did I check security and scale for this specific change" as equally mandatory as "does it build."
 
 ---
 

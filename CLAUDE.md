@@ -189,6 +189,29 @@ data store, communicate via versioned APIs/events, and never share a database wi
 
 ## 13. Security Standards
 
+**Standing requirement, every change, every layer — not a checklist run once at project start.**
+Security is considered for *every* feature at design time, on *both* backend and frontend, not
+audited-in afterward. The concrete reason this is written this strongly: a routine feature review
+(adding one new list endpoint) triggered a peer-comparison check that found **~24 of ~26 backend
+controllers accepting a client-supplied `entityId` never verified it against the authenticated
+user's own entity** — a codebase-wide cross-entity data leak (IDOR) that had been present all along,
+because security was being checked per-feature instead of as a standing architectural property. See
+`MEMORY.md` for the incident and fix status. Do not let this recur:
+
+- **Every endpoint that accepts an identifier scoping access to a tenant/entity/resource** (an
+  `entityId`, a resource ID looked up before use, a customer/supplier ID, etc.) **must verify the
+  authenticated caller is actually authorized for that specific resource**, not merely authenticated
+  and role-checked in the abstract. Use the shared ownership-check helper in `SecurityUtils` (added
+  during the IDOR fix — reuse it, do not hand-roll a new `if (entityId != currentUser.entityId)`
+  block per controller). When a role legitimately needs cross-entity access (`SYSTEM_ADMIN`,
+  possibly `AUDITOR`), that must be an explicit, narrow, documented exception on that specific
+  endpoint — never the default.
+- **Frontend is not a security boundary but is still in scope.** The frontend must never rely on
+  hiding a UI control as its only access control (the backend enforces it), but it also must not
+  introduce its own gaps: never trust client-side state for what data to request (derive `entityId`
+  and similar scoping values from the authenticated session, never from user-editable state or URL
+  params the user could tamper with), and never log or expose tokens/keys/secrets in client code,
+  console output, or error messages surfaced to the UI.
 - All new endpoints go through the existing JWT + RBAC filter chain or the API-key filter chain —
   never a bespoke auth path.
 - Role checks match the existing six roles (`DATA_ENTRY`, `ACCOUNTANT`, `SENIOR_ACCOUNTANT`,
@@ -198,16 +221,32 @@ data store, communicate via versioned APIs/events, and never share a database wi
   (only `application.example.properties` is tracked).
 - Field-level security / ABAC is target-state (Project.md Security) — flag where it's needed rather
   than half-implementing it per module.
+- When reviewing or building any feature, explicitly ask: "does this introduce a new
+  identifier-scoped resource, and if so, is ownership checked?" — this single question would have
+  caught the IDOR gap on day one of each of the ~24 affected controllers.
 
 ## 14. Performance Standards
 
+**Standing requirement, every change, every layer.** Scale is a design-time consideration for every
+feature, not a later optimization pass — ask "what happens to this at 10x/100x the data or
+concurrent users this entity currently has?" before merging, on both backend and frontend:
+
 - No N+1 queries in new repository/service code — batch or fetch-join per existing patterns in
   `ledger` and `analytics`.
+- Every new list/query endpoint is paginated from the start (CLAUDE.md §9) — never return an
+  unbounded collection because "there won't be that many rows" today.
 - Dashboard/report endpoints load independent data sources in parallel (existing analytics pattern)
   — do not regress this by adding a new sequential blocking call.
 - Long-running batch operations (depreciation runs, revaluation, future consolidation) must not
   block the HTTP request thread once Phase 3's background-job pipeline lands — track this
   migration explicitly, don't silently leave new batch work synchronous.
+- Frontend: lists/tables backed by potentially large datasets use the existing pagination/search
+  primitives rather than fetching and rendering an entire collection client-side; avoid introducing
+  a component that re-fetches or re-renders on every keystroke without debouncing when it queries
+  the backend.
+- Index any new foreign key or filter column that will be queried at row counts beyond a handful —
+  match the existing indexing pattern in the Flyway migrations (e.g. `(resource_type, resource_id)`,
+  `entity_id`).
 
 ## 15. Accessibility & Localization Standards
 
@@ -223,11 +262,14 @@ No change merges to `main` without:
 1. Compiles/builds clean (`./mvnw` for backend, `npm run build` for frontend).
 2. New/changed business rules have passing tests (see §11).
 3. No new endpoint ships without OpenAPI docs and a matching frontend API client function.
-4. Engineering review (Enterprise Software Architect) — see AGENTS.md.
-5. Accounting/functional review (Enterprise Financial Systems Architect) for anything touching
+4. **Security + scale self-check (§13, §14), on both backend and frontend** — any new
+   identifier-scoped endpoint has an ownership check and is paginated; explicitly confirmed, not
+   assumed. Engineering review does not pass without this being checked, same as tests passing.
+5. Engineering review (Enterprise Software Architect) — see AGENTS.md.
+6. Accounting/functional review (Enterprise Financial Systems Architect) for anything touching
    money, postings, tax, dates/periods, or compliance — see AGENTS.md. Purely cosmetic
    frontend-only changes with no data or business-rule impact may skip this gate.
-6. `MEMORY.md` updated by the Delivery Manager role.
+7. `MEMORY.md` updated by the Delivery Manager role.
 
 ## 17. Mandatory Reviews / Accounting Approval Rule
 

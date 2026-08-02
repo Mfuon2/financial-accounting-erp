@@ -267,6 +267,14 @@ runs, not caused by this session's work, confirmed present before and after):**
   scaffolding to remove — new API clients must support it.
 - Configurable document numbering (13 document types via `shared/codegen`) is the established
   pattern for any new transactional document type — never hardcode a new prefix/sequence.
+- **Standing principle, user-mandated 2026-08-02: security and scale are considered for every
+  feature, on both backend and frontend, at design/build time — not audited in afterward.** This
+  is now written into CLAUDE.md §13–14 and §16.4, and into AGENTS.md's Agent 1 review checklist, as
+  a permanent, non-optional gate, not a one-time cleanup pass. Concrete trigger: the codebase-wide
+  IDOR gap below existed because security was being reasoned about per-feature instead of as a
+  standing architectural property that should have been checked on every one of the ~24 affected
+  controllers as it was written. Every future module (Phase 1 onward) must be designed against this
+  from the start — do not repeat the pattern of building first and discovering the gap later.
 
 ## Accounting Decisions
 
