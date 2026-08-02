@@ -37,9 +37,12 @@ FUTURE → OPEN → ADJUSTING → CLOSING → CLOSED → REOPENED
 - **CLOSED**: Immutable. All entries are finalized.
 - **REOPENED**: Previously closed; audit-triggered reopen for corrections only.
 
-The `generateFiscalYear` endpoint bootstraps all 12 calendar months at once with the
-correct initial states. Transitions are validated — illegal jumps (e.g., OPEN → CLOSED)
-will return a `422 Unprocessable Entity`.
+The `generateFiscalYear` endpoint bootstraps all 12 calendar months at once — every
+period starts as **FUTURE**; none is auto-opened. Callers must explicitly transition
+the period they want to start using to **OPEN** via the transition endpoint. Transitions
+are validated — illegal jumps (e.g., OPEN → CLOSED) will return a `422 Unprocessable Entity`,
+and only one period per entity may be `OPEN` at a time (attempting to open a second one
+returns `409` with error code `PERIOD_ALREADY_OPEN`).
 
 **Dependency:** Periods are required before any journal entries can be created 
 (the `periodId` foreign key on `JournalEntry` must reference a valid open period).
@@ -101,9 +104,12 @@ class PeriodController(private val periodService: PeriodService) {
 Atomically creates 12 accounting periods for the specified calendar year, scoped to
 the given `entityId` (tenant).
 
-The first period (January) is initialised as **OPEN**; all subsequent months are
-set to **FUTURE**. No existing periods are overwritten — calling this endpoint for a
-year that already exists returns `409 FISCAL_YEAR_ALREADY_EXISTS`.
+**All 12 periods are initialised as `FUTURE`** — none is auto-opened, including
+January. This is intentional: generating a (possibly historical) fiscal year must
+never silently switch the entity's active working period. After generation, the
+caller must explicitly transition the period they want to start using to `OPEN` via
+`POST /{id}/transition`. No existing periods are overwritten — calling this endpoint
+for a year that already exists returns `409 FISCAL_YEAR_ALREADY_EXISTS`.
 
 Use this as the first setup step after onboarding a new legal entity.
 
