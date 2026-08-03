@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.AccessDeniedException
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingRequestHeaderException
@@ -23,6 +24,11 @@ import org.springframework.web.servlet.resource.NoResourceFoundException
  * Handles all known exception types and maps them to a consistent [ApiResponse] envelope.
  *
  * Priority order (Spring matches the most specific handler first):
+ * 0. JWT/token exceptions (401) and [AccessDeniedException] (403) — security-layer exceptions
+ *    that must NOT fall through to the generic 500 catch-all (see §0.5 below: before it was
+ *    added, every `@PreAuthorize` denial anywhere in this app returned 500 INTERNAL_ERROR
+ *    instead of 403 FORBIDDEN, because AccessDeniedException isn't a BaseAccountingException
+ *    and has no more-specific handler than the catch-all).
  * 1. [BaseAccountingException] subtypes — domain exceptions with their own HTTP status.
  *    Covers: ValidationException (400), ResourceNotFoundException (404),
  *    ImmutableRecordException (422), PeriodLockedException (422),
@@ -79,6 +85,26 @@ class GlobalExceptionHandler {
         val status = 401
         return ResponseEntity.status(status).body(
             ApiResponse.error("INVALID_TOKEN", "The provided token is invalid or has been tampered with.", null, status)
+        )
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 0.5 — Method-security denial (@PreAuthorize failure) → HTTP 403.
+    //     Without this handler, AccessDeniedException (which is NOT a
+    //     BaseAccountingException) falls through to the generic Exception catch-all
+    //     below and returns 500 INTERNAL_ERROR instead of 403 FORBIDDEN — silently
+    //     defeating every @PreAuthorize role check in the entire application.
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @ExceptionHandler(AccessDeniedException::class)
+    fun handleAccessDenied(
+        ex: AccessDeniedException,
+        request: WebRequest
+    ): ResponseEntity<ApiResponse<Nothing>> {
+        log.warn("access.denied: {}", ex.message)
+        val status = 403
+        return ResponseEntity.status(status).body(
+            ApiResponse.error("FORBIDDEN", "You do not have permission to perform this action.", null, status)
         )
     }
 
