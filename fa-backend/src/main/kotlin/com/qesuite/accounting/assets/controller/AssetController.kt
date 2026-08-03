@@ -9,6 +9,7 @@ import com.qesuite.accounting.assets.service.DepreciationService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -18,6 +19,7 @@ import jakarta.validation.constraints.Positive
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -37,6 +39,7 @@ class AssetController(
         summary = "Create a new fixed asset",
         description = "Registers a fixed asset with COA account mappings. Asset code must be unique within the entity."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun createAsset(@Valid @RequestBody request: CreateAssetRequest): ApiResponse<FixedAsset> {
         SecurityUtils.requireOwnEntity(request.entityId)
         val command = CreateAssetCommand(
@@ -63,6 +66,7 @@ class AssetController(
         summary = "List fixed assets",
         description = "Returns a paginated list of fixed assets for the given entity, optionally filtered by status."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_READ)
     fun listAssets(
         @RequestParam entityId: UUID,
         @RequestParam(required = false) statusFilter: String?,
@@ -94,6 +98,7 @@ class AssetController(
         summary = "Get a fixed asset by ID",
         description = "Returns the full detail of a single fixed asset."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_READ)
     fun getAsset(@PathVariable id: UUID): ApiResponse<FixedAsset> {
         val asset = assetMasterService.findById(id)
         SecurityUtils.requireOwnEntity(asset.entityId)
@@ -106,6 +111,7 @@ class AssetController(
         description = "Records the disposal of an active fixed asset. Creates and posts the disposal journal entry " +
                 "(DR Cash, DR Accum Dep, CR Asset Cost, CR/DR Gain/Loss on Disposal)."
     )
+    @PreAuthorize(RoleSets.APPROVER)
     fun disposeAsset(
         @PathVariable id: UUID,
         @Valid @RequestBody request: DisposeAssetRequest
@@ -123,6 +129,7 @@ class AssetController(
 
     @PostMapping("/depreciation/run")
     @Operation(summary = "Run depreciation for an entity")
+    @PreAuthorize(RoleSets.APPROVER)
     fun runDepreciation(@Valid @RequestBody request: RunDepreciationRequest): ApiResponse<String> {
         SecurityUtils.requireOwnEntity(request.entityId)
         depreciationService.runDepreciation(request.entityId, request.periodId, request.date)
@@ -132,6 +139,7 @@ class AssetController(
     /** Alias consumed by the frontend batch-depreciate call. */
     @PostMapping("/batch-depreciate")
     @Operation(summary = "Batch-run depreciation (alias for /depreciation/run)")
+    @PreAuthorize(RoleSets.APPROVER)
     fun batchDepreciate(@Valid @RequestBody request: RunDepreciationRequest): ApiResponse<String> {
         SecurityUtils.requireOwnEntity(request.entityId)
         depreciationService.runDepreciation(request.entityId, request.periodId, request.date)
@@ -140,6 +148,7 @@ class AssetController(
 
     @PutMapping("/{id}")
     @Operation(summary = "Update a fixed asset")
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun updateAsset(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateAssetRequest
@@ -158,6 +167,7 @@ class AssetController(
 
     @GetMapping("/{id}/depreciation-schedule")
     @Operation(summary = "Get projected depreciation schedule for an asset")
+    @PreAuthorize(RoleSets.ACCOUNTING_READ)
     fun getDepreciationSchedule(
         @PathVariable id: UUID,
         @RequestParam(defaultValue = "12") months: Int

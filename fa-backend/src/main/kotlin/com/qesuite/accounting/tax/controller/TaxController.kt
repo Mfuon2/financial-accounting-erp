@@ -7,6 +7,7 @@ import com.qesuite.accounting.tax.service.CreateTaxCodeCommand
 import com.qesuite.accounting.tax.service.CreateTaxRateCommand
 import com.qesuite.accounting.tax.service.TaxCodeView
 import com.qesuite.accounting.tax.service.TaxService
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -14,6 +15,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Positive
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -37,6 +39,7 @@ class TaxController(
         description = "Registers a new tax classification code for the entity (e.g., VAT_16, WHT_5). " +
                 "Code must be unique within the entity."
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun createTaxCode(@Valid @RequestBody request: CreateTaxCodeRequest): ApiResponse<TaxCode> {
         SecurityUtils.requireOwnEntity(request.entityId)
         return ApiResponse.success(
@@ -61,6 +64,7 @@ class TaxController(
         summary = "List tax codes",
         description = "Returns all tax codes for the entity, each with the current effective rate."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun listTaxCodes(@RequestParam entityId: UUID): ApiResponse<List<TaxCodeView>> {
         SecurityUtils.requireOwnEntity(entityId)
         return ApiResponse.success(taxService.listTaxCodeViews(entityId))
@@ -71,6 +75,7 @@ class TaxController(
         summary = "Get a tax code by ID",
         description = "Returns the detail of a single tax code by its primary key."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getTaxCode(@PathVariable id: UUID): ApiResponse<TaxCode> {
         val taxCode = taxService.getTaxCodeById(id)
         SecurityUtils.requireOwnEntity(taxCode.entityId)
@@ -88,6 +93,7 @@ class TaxController(
         description = "Registers an effective rate for a tax code. Rate must be between 0 and 1 " +
                 "(e.g., 0.1600 for 16%). Multiple rates with different effective dates are supported."
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun createTaxRate(@Valid @RequestBody request: CreateTaxRateRequest): ApiResponse<TaxRate> {
         SecurityUtils.requireOwnEntity(request.entityId)
         return ApiResponse.success(
@@ -107,6 +113,7 @@ class TaxController(
         summary = "List rates for a tax code",
         description = "Returns all tax rates associated with the given tax code, ordered by effective date."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun listRates(@RequestParam taxCodeId: UUID): ApiResponse<List<TaxRate>> {
         // No entityId param on this endpoint — resolve the parent tax code's owning entity first.
         SecurityUtils.requireOwnEntity(taxService.getTaxCodeById(taxCodeId).entityId)
@@ -123,6 +130,7 @@ class TaxController(
         description = "Computes the tax amount for a given base amount using the effective rate of the " +
                 "specified tax code on the given date. Returns the tax amount (not inclusive of base)."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun calculateTax(@Valid @RequestBody request: CalculateTaxRequest): ApiResponse<TaxCalculationResult> {
         SecurityUtils.requireOwnEntity(request.entityId)
         val taxAmount = taxService.calculateTax(
@@ -148,6 +156,7 @@ class TaxController(
         summary = "Update a tax code",
         description = "Updates the description and recoverability of an existing tax code."
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun updateTaxCode(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateTaxCodeRequest

@@ -11,6 +11,7 @@ import com.qesuite.accounting.fx.service.RevaluationPreviewResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -22,6 +23,7 @@ import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Positive
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -63,6 +65,7 @@ class FxController(
         summary = "Register a currency for an entity",
         description = "Creates a currency record. At most one currency per entity may have isFunctional=true."
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun createCurrency(
         @Valid @RequestBody command: CreateCurrencyCommand
     ): ApiResponse<Currency> {
@@ -106,6 +109,7 @@ class FxController(
         summary = "List currencies registered for an entity",
         description = "Returns all currencies (functional and non-functional) registered for the entity."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun listCurrencies(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID
     ): ApiResponse<List<Currency>> {
@@ -115,6 +119,7 @@ class FxController(
 
     @PutMapping("/currencies/{id}")
     @Operation(summary = "Update currency metadata")
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun updateCurrency(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateCurrencyRequest
@@ -137,6 +142,7 @@ class FxController(
         summary = "Create or update an exchange rate",
         description = "Persists a SPOT, CLOSING, or AVERAGE exchange rate for a currency pair on a specific date."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun createExchangeRate(
         @Valid @RequestBody command: CreateExchangeRateCommand
     ): ApiResponse<ExchangeRate> {
@@ -157,6 +163,7 @@ class FxController(
         summary = "List all exchange rates for an entity",
         description = "Returns all exchange rate records for the entity, ordered by date descending then from-currency ascending."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun listExchangeRates(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID
     ): ApiResponse<List<ExchangeRate>> {
@@ -169,6 +176,7 @@ class FxController(
         summary = "Look up a specific exchange rate",
         description = "Returns the exchange rate for the given currency pair, date, and type. Defaults to SPOT if type is omitted."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getRate(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID,
         @RequestParam @Parameter(description = "Source currency (ISO 4217)", required = true) fromCurrency: String,
@@ -186,6 +194,7 @@ class FxController(
 
     @PutMapping("/exchange-rates/{id}")
     @Operation(summary = "Update exchange rate value")
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun updateExchangeRate(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateExchangeRateRequest
@@ -205,6 +214,7 @@ class FxController(
         summary = "Preview FX revaluation",
         description = "Returns indicative revaluation data per monetary-item account — balances, prior rate, closing rate, and P&L delta — without posting any journal entries."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun previewRevaluation(
         @RequestParam entityId: UUID,
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate
@@ -226,6 +236,7 @@ Requires CLOSING rates to be loaded for all foreign currencies before calling th
 endpoint.
 """
     )
+    @PreAuthorize(RoleSets.APPROVER)
     fun runRevaluation(
         @Valid @RequestBody command: RunRevaluationCommand
     ): ApiResponse<Unit> {
