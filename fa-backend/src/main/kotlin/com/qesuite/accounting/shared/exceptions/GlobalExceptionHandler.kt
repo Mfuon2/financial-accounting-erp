@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.AccessDeniedException
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingRequestHeaderException
@@ -79,6 +80,26 @@ class GlobalExceptionHandler {
         val status = 401
         return ResponseEntity.status(status).body(
             ApiResponse.error("INVALID_TOKEN", "The provided token is invalid or has been tampered with.", null, status)
+        )
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 0b. Method-security denials (@PreAuthorize) — HTTP 403.
+    //     Pre-existing, codebase-wide gap found while adding role gating to the new
+    //     CategoryController (§13): with no handler registered, every @PreAuthorize denial
+    //     in every controller (OrganizationController, ApiKeyController, UserController, and
+    //     now CategoryController) fell through to the catch-all 500 handler below instead of
+    //     403 — access was still correctly denied (not a bypass), but with the wrong status
+    //     code and a misleading "unexpected error" message. Spring Security 6's
+    //     AuthorizationDeniedException (thrown by the modern @PreAuthorize interceptor) is a
+    //     subtype of AccessDeniedException, so this handler covers both.
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @ExceptionHandler(AccessDeniedException::class)
+    fun handleAccessDenied(ex: AccessDeniedException, request: WebRequest): ResponseEntity<ApiResponse<Nothing>> {
+        val status = 403
+        return ResponseEntity.status(status).body(
+            ApiResponse.error("FORBIDDEN", "You do not have permission to perform this action.", null, status)
         )
     }
 
