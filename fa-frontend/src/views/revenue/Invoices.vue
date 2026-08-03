@@ -5,6 +5,7 @@ import { invoices as invoicesApi, customers as customersApi, accounts as account
 import { useAppMode } from '@/composables/useAppMode.js'
 import { useToast } from '@/composables/useToast.js'
 import { useAuth } from '@/composables/useAuth.js'
+import { useCategoryCache } from '@/composables/useCategoryCache.js'
 import { fmt, fmtDate } from '@/utils/format.js'
 import PageHeader from '@/components/PageHeader.vue'
 import Button from '@/components/primitives/Button.vue'
@@ -63,7 +64,11 @@ const payMethod    = ref('BANK_TRANSFER')
 const payDate      = ref(new Date().toISOString().slice(0, 10))
 const payPeriodId  = ref(null)
 const payRef       = ref('')
-const PAYMENT_METHODS = ['BANK_TRANSFER', 'CASH', 'CHEQUE', 'MPESA', 'CREDIT_CARD']
+// Payment methods are entity-managed dynamic data (CLAUDE.md §2) — see shared/categories on
+// the backend and setup/Categories.vue for where they're created/edited. Cached at module
+// level (useCategoryCache) so this view, Bills.vue and Payments.vue share one fetch.
+const paymentMethodsCache = useCategoryCache('PAYMENT_METHOD')
+const PAYMENT_METHOD_OPTIONS = computed(() => paymentMethodsCache.options.value)
 
 // ── New invoice form ──────────────────────────────────────────────────────────
 function blankInvoice() {
@@ -131,6 +136,7 @@ async function loadList() {
 }
 
 onMounted(async () => {
+  paymentMethodsCache.load(entityId.value)
   await loadList()
 
   // Load customer list for select picker
@@ -671,7 +677,7 @@ function computeAging(inv) {
             <div class="field">
               <label>Payment Method</label>
               <select class="input" v-model="payMethod">
-                <option v-for="m in PAYMENT_METHODS" :key="m" :value="m">{{ m.replace('_', ' ') }}</option>
+                <option v-for="m in PAYMENT_METHOD_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</option>
               </select>
             </div>
             <div class="field">

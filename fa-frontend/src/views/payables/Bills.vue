@@ -5,6 +5,7 @@ import { bills as billsApi, suppliers as suppliersApi, sourceDocs as sourceDocsA
 import { useAppMode } from '@/composables/useAppMode.js'
 import { useToast } from '@/composables/useToast.js'
 import { useAuth } from '@/composables/useAuth.js'
+import { useCategoryCache } from '@/composables/useCategoryCache.js'
 import { fmt, fmtDate } from '@/utils/format.js'
 import PageHeader from '@/components/PageHeader.vue'
 import Button from '@/components/primitives/Button.vue'
@@ -74,10 +75,19 @@ function blankBill() {
   }
 }
 
-const PAYMENT_METHODS = ['BANK_TRANSFER', 'MPESA', 'CASH', 'CHEQUE', 'CREDIT_CARD']
+// Payment methods are entity-managed dynamic data (CLAUDE.md §2) — see shared/categories on
+// the backend and setup/Categories.vue for where they're created/edited. Cached at module
+// level (useCategoryCache) so this view, Payments.vue and Invoices.vue share one fetch. Codes
+// match the backend PaymentMethod enum's constant names (minus DEBIT_NOTE, which is a bill
+// lifecycle state, not a selectable payment method) since they still deserialize into that enum.
+const paymentMethodsCache = useCategoryCache('PAYMENT_METHOD')
+const PAYMENT_METHOD_OPTIONS = computed(() => paymentMethodsCache.options.value.map(o => ({
+  value: o.value, label: o.label,
+})))
 const statuses = ['ALL', 'DRAFT', 'APPROVED', 'PARTIALLY_PAID', 'PAID', 'VOID', 'DEBIT_NOTE']
 
 onMounted(async () => {
+  paymentMethodsCache.load(entityId.value)
   try {
     const data = await billsApi.list({ entityId: entityId.value, page: 0, size: 200 })
     const items = data?.content ?? data
@@ -493,7 +503,7 @@ function isOverdue(b) {
               <label>Payment Method</label>
               <SearchableSelect
                 v-model="payMethod"
-                :options="PAYMENT_METHODS.map(m => ({ value: m, label: m.replace(/_/g, ' ') }))"
+                :options="PAYMENT_METHOD_OPTIONS"
                 placeholder="Select method"
               />
             </div>
@@ -688,7 +698,7 @@ function isOverdue(b) {
           <label>Payment Method</label>
           <SearchableSelect
             v-model="runMethod"
-            :options="PAYMENT_METHODS.map(m => ({ value: m, label: m.replace(/_/g, ' ') }))"
+            :options="PAYMENT_METHOD_OPTIONS"
             placeholder="Select method"
           />
         </div>

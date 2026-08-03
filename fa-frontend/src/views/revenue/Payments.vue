@@ -5,6 +5,7 @@ import { payments as paymentsApi, customers as customersApi, invoices as invoice
 import { useAppMode } from '@/composables/useAppMode.js'
 import { useToast } from '@/composables/useToast.js'
 import { useAuth } from '@/composables/useAuth.js'
+import { useCategoryCache } from '@/composables/useCategoryCache.js'
 import { fmt, fmtDate } from '@/utils/format.js'
 import PageHeader from '@/components/PageHeader.vue'
 import Button from '@/components/primitives/Button.vue'
@@ -50,7 +51,11 @@ const reversingId   = ref(null)
 
 // ── Payment status state machine (mirrors backend PaymentStatus enum) ─────────
 const STATUSES = ['ALL', 'PENDING', 'MATCHED', 'APPROVED', 'POSTED', 'REVERSED']
-const PAYMENT_METHODS = ['BANK_TRANSFER', 'MPESA', 'CASH', 'CHEQUE', 'CREDIT_CARD']
+// Payment methods are entity-managed dynamic data (CLAUDE.md §2) — see shared/categories on
+// the backend and setup/Categories.vue for where they're created/edited. Cached at module
+// level (useCategoryCache) so this view, Bills.vue and Invoices.vue share one fetch.
+const paymentMethodsCache = useCategoryCache('PAYMENT_METHOD')
+const PAYMENT_METHOD_OPTIONS = computed(() => paymentMethodsCache.options.value)
 
 // ── Create Payment form ───────────────────────────────────────────────────────
 function blankPayment() {
@@ -78,6 +83,7 @@ const reverseReason = ref('')
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
+  paymentMethodsCache.load(entityId.value)
   await loadList()
   // Load customers for create-payment form
   try {
@@ -767,7 +773,7 @@ function invoiceNumber(id) {
           <label>Payment method <span style="color:var(--danger)">*</span></label>
           <SearchableSelect
             v-model="newPayment.paymentMethod"
-            :options="PAYMENT_METHODS.map(m => ({ value: m, label: m.replace(/_/g, ' ') }))"
+            :options="PAYMENT_METHOD_OPTIONS"
             placeholder="Select method"
           />
         </div>
