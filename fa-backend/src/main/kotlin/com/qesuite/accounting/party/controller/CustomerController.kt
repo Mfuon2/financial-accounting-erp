@@ -7,6 +7,7 @@ import com.qesuite.accounting.party.service.CustomerService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -17,6 +18,7 @@ import jakarta.validation.constraints.NotNull
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.util.UUID
 
@@ -41,6 +43,7 @@ class CustomerController(
         summary = "Create a new customer",
         description = "Creates a customer record. The customerCode must be unique within the entity."
     )
+    @PreAuthorize(RoleSets.PREPARER)
     fun create(
         @Valid @RequestBody command: CreateCustomerCommand
     ): ApiResponse<Customer> {
@@ -53,6 +56,7 @@ class CustomerController(
         summary = "List customers for an entity",
         description = "Returns a paginated list of customers. Pass activeOnly=true to exclude deactivated customers."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun list(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID,
         @RequestParam(required = false, defaultValue = "true")
@@ -70,6 +74,7 @@ class CustomerController(
 
     @GetMapping("/{id}")
     @Operation(summary = "Retrieve a customer by ID")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun findById(
         @PathVariable @Parameter(description = "Customer UUID") id: UUID
     ): ApiResponse<Customer> {
@@ -83,6 +88,7 @@ class CustomerController(
         summary = "Update a customer",
         description = "Updates mutable fields: creditLimit, paymentTerms, email, phone. Only non-null fields in the request body are applied."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun update(
         @PathVariable @Parameter(description = "Customer UUID") id: UUID,
         @Valid @RequestBody command: UpdateCustomerCommand
@@ -96,6 +102,7 @@ class CustomerController(
         summary = "Deactivate a customer (soft delete)",
         description = "Sets isActive=false. All historical records are preserved."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun deactivate(
         @PathVariable @Parameter(description = "Customer UUID") id: UUID,
         @Valid @RequestBody command: DeactivateCustomerCommand

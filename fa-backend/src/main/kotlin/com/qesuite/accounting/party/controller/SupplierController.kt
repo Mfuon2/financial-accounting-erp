@@ -8,6 +8,7 @@ import com.qesuite.accounting.party.service.SupplierService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -18,6 +19,7 @@ import jakarta.validation.constraints.NotNull
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.util.UUID
 
@@ -42,6 +44,7 @@ class SupplierController(
         summary = "Create a new supplier",
         description = "Creates a supplier record. The supplierCode must be unique within the entity."
     )
+    @PreAuthorize(RoleSets.PREPARER)
     fun create(
         @Valid @RequestBody command: CreateSupplierCommand
     ): ApiResponse<Supplier> {
@@ -54,6 +57,7 @@ class SupplierController(
         summary = "List suppliers for an entity",
         description = "Returns a paginated list of suppliers. Pass activeOnly=true to exclude deactivated suppliers."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun list(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID,
         @RequestParam(required = false, defaultValue = "true")
@@ -71,6 +75,7 @@ class SupplierController(
 
     @GetMapping("/{id}")
     @Operation(summary = "Retrieve a supplier by ID")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun findById(
         @PathVariable @Parameter(description = "Supplier UUID") id: UUID
     ): ApiResponse<Supplier> {
@@ -84,6 +89,7 @@ class SupplierController(
         summary = "Update a supplier",
         description = "Updates mutable fields: email, phone, paymentTerms. Only non-null fields in the request body are applied."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun update(
         @PathVariable @Parameter(description = "Supplier UUID") id: UUID,
         @Valid @RequestBody command: UpdateSupplierCommand
@@ -97,6 +103,7 @@ class SupplierController(
         summary = "Deactivate a supplier (soft delete)",
         description = "Sets isActive=false. All historical records are preserved."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun deactivate(
         @PathVariable @Parameter(description = "Supplier UUID") id: UUID,
         @Valid @RequestBody command: DeactivateSupplierCommand
@@ -110,6 +117,7 @@ class SupplierController(
         summary = "Supplier statement",
         description = "Returns all bills and payments for a supplier with running balance, sorted by date ascending."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_READ)
     fun getStatement(
         @PathVariable @Parameter(description = "Supplier UUID") id: UUID
     ): ApiResponse<SupplierStatementResponse> {

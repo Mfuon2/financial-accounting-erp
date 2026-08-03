@@ -11,6 +11,7 @@ import com.qesuite.accounting.invoicing.service.InvoiceService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -20,6 +21,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
 import java.util.UUID
@@ -51,6 +53,7 @@ class InvoiceController(
         summary = "Create a new invoice in DRAFT status",
         description = "Creates a new invoice with lines. No journal entry is posted until the invoice is approved."
     )
+    @PreAuthorize(RoleSets.PREPARER)
     fun createDraft(
         @Valid @RequestBody command: CreateInvoiceCommand
     ): ApiResponse<Invoice> {
@@ -63,6 +66,7 @@ class InvoiceController(
         summary = "List invoices with optional filters",
         description = "Returns a paginated list of invoices filtered by entityId and optional customerId, status, or date range."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun list(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID,
         @RequestParam(required = false) @Parameter(description = "Filter by customer UUID") customerId: UUID?,
@@ -89,6 +93,7 @@ class InvoiceController(
 
     @GetMapping("/{id}")
     @Operation(summary = "Retrieve an invoice by ID", description = "Returns the full invoice including all lines.")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun findById(
         @PathVariable @Parameter(description = "Invoice UUID") id: UUID
     ): ApiResponse<Invoice> {
@@ -102,6 +107,7 @@ class InvoiceController(
         summary = "Approve a DRAFT invoice and post the AR journal entry",
         description = "Validates credit limit, posts the AR journal entry, and transitions the invoice DRAFT → APPROVED → SENT."
     )
+    @PreAuthorize(RoleSets.APPROVER)
     fun approve(
         @PathVariable @Parameter(description = "Invoice UUID") id: UUID
     ): ApiResponse<Invoice> {
@@ -114,6 +120,7 @@ class InvoiceController(
         summary = "Void a DRAFT invoice",
         description = "Voids a DRAFT invoice. Posted invoices must use a credit note instead."
     )
+    @PreAuthorize(RoleSets.APPROVER)
     fun void(
         @PathVariable @Parameter(description = "Invoice UUID") id: UUID,
         @Valid @RequestBody command: VoidInvoiceCommand
@@ -127,6 +134,7 @@ class InvoiceController(
         summary = "Issue a credit note against a posted invoice",
         description = "Creates a credit note with negative amounts and posts a reversing journal entry against the original AR posting."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun createCreditNote(
         @PathVariable @Parameter(description = "Original invoice UUID") id: UUID,
         @Valid @RequestBody command: CreateCreditNoteCommand
@@ -140,6 +148,7 @@ class InvoiceController(
         summary = "Apply a payment to an invoice",
         description = "Updates paidAmount and outstandingAmount. Transitions to PARTIALLY_PAID or PAID as appropriate."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun applyPayment(
         @PathVariable @Parameter(description = "Invoice UUID") id: UUID,
         @Valid @RequestBody command: ApplyInvoicePaymentCommand
@@ -153,6 +162,7 @@ class InvoiceController(
         summary = "Accounts Receivable ageing report",
         description = "Buckets outstanding invoices into 0–30 / 31–60 / 61–90 / 90+ days past due as of the given date."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_READ)
     fun arAgeing(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID,
         @RequestParam

@@ -5,12 +5,14 @@ import com.qesuite.accounting.invoicing.service.InvoiceService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -49,6 +51,7 @@ class CreditNoteController(
         summary = "List credit notes for an entity",
         description = "Returns a paginated list of credit notes (Invoice rows with status=CREDIT_NOTE) for the given entityId."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_READ)
     fun list(
         @RequestParam @Parameter(description = "Tenant/entity UUID", required = true) entityId: UUID,
         @PageableDefault(size = 50) pageable: Pageable
