@@ -48,6 +48,7 @@ export const routes = [
       { path: '/users',       component: () => import('@/views/setup/Users.vue') },
       { path: '/api-keys',    component: () => import('@/views/setup/ApiKeys.vue') },
       { path: '/tax',         component: () => import('@/views/setup/TaxCurrency.vue') },
+      { path: '/categories',  component: () => import('@/views/setup/Categories.vue') },
       { path: '/security',    component: () => import('@/views/setup/Security.vue') },
       { path: '/setup-health', component: () => import('@/views/setup/SetupHealth.vue') },
     ],
@@ -90,6 +91,7 @@ export const CRUMBS = {
   '/users':         ['Setup', 'Users'],
   '/api-keys':      ['Setup', 'API Keys'],
   '/tax':           ['Setup', 'Tax & Currency'],
+  '/categories':    ['Setup', 'Categories'],
   '/security':      ['Setup', 'Security'],
   '/setup-health':  ['Setup', 'System Health'],
 }
