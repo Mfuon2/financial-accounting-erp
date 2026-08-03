@@ -93,7 +93,13 @@ class GlobalExceptionHandler {
     //     Without this handler, AccessDeniedException (which is NOT a
     //     BaseAccountingException) falls through to the generic Exception catch-all
     //     below and returns 500 INTERNAL_ERROR instead of 403 FORBIDDEN — silently
-    //     defeating every @PreAuthorize role check in the entire application.
+    //     defeating every @PreAuthorize role check in the entire application. Found
+    //     independently in two parallel workstreams (role-gating sweep and the new
+    //     CategoryController) — access was always correctly denied, never a bypass,
+    //     just with the wrong status code and a misleading "unexpected error" message.
+    //     Spring Security 6's AuthorizationDeniedException (thrown by the modern
+    //     @PreAuthorize interceptor) is a subtype of AccessDeniedException, so this
+    //     handler covers both.
     // ──────────────────────────────────────────────────────────────────────────
 
     @ExceptionHandler(AccessDeniedException::class)

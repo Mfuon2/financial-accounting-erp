@@ -73,6 +73,7 @@ const NAV_ROUTES = [
   { id: "users",        label: "Users",             icon: "users",      route: "/users",        group: "Setup" },
   { id: "api-keys",     label: "API Keys",          icon: "key",        route: "/api-keys",     group: "Setup" },
   { id: "tax",          label: "Tax & Currency",    icon: "tag",        route: "/tax",          group: "Setup" },
+  { id: "categories",   label: "Categories",        icon: "sliders",    route: "/categories",   group: "Setup" },
   { id: "security",     label: "Security",          icon: "shield",     route: "/security",     group: "Setup" },
 ]
 

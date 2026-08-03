@@ -5,6 +5,7 @@ import { customers as customersApi, codes as codesApi } from '@/api/index.js'
 import { isDemo } from '@/composables/useAppMode.js'
 import { useAuth } from '@/composables/useAuth.js'
 import { useToast } from '@/composables/useToast.js'
+import { useCategoryCache } from '@/composables/useCategoryCache.js'
 import { fmt, fmtDate } from '@/utils/format.js'
 import PageHeader   from '@/components/PageHeader.vue'
 import Button       from '@/components/primitives/Button.vue'
@@ -52,11 +53,19 @@ const showDeactivate   = ref(false)
 const deactivating     = ref(false)
 const deactivateReason = ref('')
 
-const PAYMENT_TERMS = ['DUE_ON_RECEIPT', 'NET_15', 'NET_30', 'NET_45', 'NET_60', 'NET_90']
+// Payment terms are entity-managed dynamic data (CLAUDE.md §2) — see shared/categories on the
+// backend and setup/Categories.vue for where they're created/edited. Cached at module level
+// (useCategoryCache) so this view, Suppliers.vue and any other consumer share one fetch.
+const paymentTermsCache = useCategoryCache('PAYMENT_TERM')
+const PAYMENT_TERM_OPTIONS = computed(() => [
+  { value: '', label: '— None —' },
+  ...paymentTermsCache.options.value,
+])
 
 // ── Load ───────────────────────────────────────────────────────────────────────
 async function load() {
   loading.value = true
+  paymentTermsCache.load(entityId.value)
   if (isDemo.value) {
     customers.value = CUSTOMERS.map(normDemo)
     loading.value = false
@@ -300,7 +309,7 @@ function utilPct(c) {
           <label>Payment terms</label>
           <SearchableSelect
             v-model="newForm.paymentTerms"
-            :options="[{ value: '', label: '— None —' }, ...PAYMENT_TERMS.map(t => ({ value: t, label: termsLabel(t) }))]"
+            :options="PAYMENT_TERM_OPTIONS"
             placeholder="Select terms"
           />
         </div>
@@ -377,7 +386,7 @@ function utilPct(c) {
               <label>Payment terms</label>
               <SearchableSelect
                 v-model="editForm.paymentTerms"
-                :options="[{ value: '', label: '— None —' }, ...PAYMENT_TERMS.map(t => ({ value: t, label: termsLabel(t) }))]"
+                :options="PAYMENT_TERM_OPTIONS"
                 placeholder="Select terms"
               />
             </div>
