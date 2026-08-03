@@ -4,6 +4,7 @@ import com.qesuite.accounting.ap.domain.Period
 import com.qesuite.accounting.ap.domain.PeriodStatus
 import com.qesuite.accounting.ap.service.PeriodService
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -16,6 +17,7 @@ import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotNull
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.util.*
 
@@ -65,6 +67,7 @@ class PeriodController(private val periodService: PeriodService) {
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Periods returned"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Missing or invalid entityId")
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun listPeriods(
         @RequestParam
         @Parameter(description = "Tenant/company UUID", example = "550e8400-e29b-41d4-a716-446655440000")
@@ -86,6 +89,7 @@ class PeriodController(private val periodService: PeriodService) {
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Period found"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Period not found")
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getPeriod(
         @PathVariable
         @Parameter(description = "UUID of the accounting period", example = "660e8400-e29b-41d4-a716-446655440001")
@@ -128,6 +132,7 @@ Use this as the first setup step after onboarding a new legal entity.
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid entity ID or year"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Fiscal year already exists")
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun generateFiscalYear(
         @Valid @RequestBody request: GenerateFiscalYearRequest
     ): ApiResponse<String> {
@@ -162,6 +167,7 @@ error code `INVALID_STATE_TRANSITION`.
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Period not found"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Illegal state transition")
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun transitionPeriod(
         @PathVariable
         @Parameter(description = "UUID of the accounting period to transition", example = "660e8400-e29b-41d4-a716-446655440001")

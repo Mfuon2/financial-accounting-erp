@@ -5,11 +5,13 @@ import com.qesuite.accounting.ap.service.AccountingCycleResult
 import com.qesuite.accounting.ap.service.AccountingCycleService
 import com.qesuite.accounting.ap.service.ClosingParams
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.util.*
 
@@ -103,6 +105,7 @@ class AccountingCycleController(
         description = "Executes Steps 3–9 of the IFRS accounting cycle for the given period. " +
                 "The period must be OPEN or ADJUSTING. On completion the period is CLOSED."
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun runFullCycle(
         @Valid @RequestBody request: RunCycleRequest
     ): ApiResponse<AccountingCycleResult> {
@@ -127,6 +130,7 @@ class AccountingCycleController(
         description = "Advances the period to the requested status after validating " +
                 "the transition is permitted by the state machine."
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun transitionPeriod(
         @Valid @RequestBody request: TransitionPeriodRequest
     ): ApiResponse<Unit> {
@@ -151,6 +155,7 @@ class AccountingCycleController(
         description = "Checks all pre-conditions for the given transition without persisting any changes. " +
                 "Returns 200 OK if the transition is valid, or 422 Unprocessable Entity if not."
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun validateStep(
         @RequestParam entityId: UUID,
         @RequestParam periodId: UUID,
