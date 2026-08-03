@@ -10,6 +10,7 @@ import com.qesuite.accounting.source.service.SourceDocumentService
 import com.qesuite.accounting.source.service.UpdateSourceDocumentRequest
 import com.qesuite.accounting.shared.exceptions.ApiResponse
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import com.qesuite.accounting.shared.storage.StorageService
 import io.swagger.v3.oas.annotations.Operation
@@ -22,6 +23,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
 import java.util.*
@@ -74,6 +76,7 @@ Captures a new financial source document in **DRAFT** status.
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Document created in DRAFT status"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Missing or invalid fields")
     )
+    @PreAuthorize(RoleSets.PREPARER)
     fun create(
         @Valid @RequestBody request: CreateSourceDocumentRequest
     ): ApiResponse<SourceDocument> {
@@ -86,6 +89,7 @@ Captures a new financial source document in **DRAFT** status.
         summary = "List all source documents for an entity",
         description = "Returns all source documents scoped to the given entity. Filter by status client-side."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getAll(
         @RequestParam
         @Parameter(description = "Tenant/company UUID", example = "550e8400-e29b-41d4-a716-446655440000")
@@ -101,6 +105,7 @@ Captures a new financial source document in **DRAFT** status.
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Document found"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Document not found")
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getById(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
@@ -124,6 +129,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Document is in an immutable status"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Document not found")
     )
+    @PreAuthorize(RoleSets.PREPARER)
     fun update(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID,
         @Valid @RequestBody request: UpdateSourceDocumentRequest
@@ -142,6 +148,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Transitioned to SUBMITTED"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Invalid state transition")
     )
+    @PreAuthorize(RoleSets.PREPARER)
     fun submit(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
@@ -156,6 +163,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Transitioned to REVIEWED"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Invalid state transition")
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun review(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
@@ -170,6 +178,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Transitioned to APPROVED"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Invalid state transition")
     )
+    @PreAuthorize(RoleSets.APPROVER)
     fun approve(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
@@ -184,6 +193,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Transitioned to ARCHIVED"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Invalid state transition")
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun archive(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
@@ -201,6 +211,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Transitioned to VOID"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Invalid state transition")
     )
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun void(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
@@ -218,6 +229,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Transitioned to DRAFT"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Document is not in ARCHIVED status")
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun restore(
         @PathVariable @Parameter(description = "Source document UUID") id: UUID
     ): ApiResponse<SourceDocument> {
@@ -232,6 +244,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
 
     @PostMapping("/{id}/attachments", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @Operation(summary = "Upload a file attachment to a source document")
+    @PreAuthorize(RoleSets.PREPARER)
     fun uploadAttachment(
         @PathVariable id: UUID,
         @RequestParam("file") file: MultipartFile,
@@ -253,6 +266,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
 
     @GetMapping("/{id}/attachments")
     @Operation(summary = "List all active attachments for a source document")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun listAttachments(@PathVariable id: UUID): ApiResponse<List<SourceDocumentAttachment>> {
         SecurityUtils.requireOwnEntity(sourceDocumentService.findById(id).entityId)
         return ApiResponse.success(attachmentRepository.findByDocumentIdAndIsActiveTrue(id))
@@ -260,6 +274,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
 
     @GetMapping("/{id}/attachments/{attachmentId}/download")
     @Operation(summary = "Download an attachment")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun downloadAttachment(
         @PathVariable id: UUID,
         @PathVariable attachmentId: UUID,
@@ -277,6 +292,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
     @DeleteMapping("/{id}/attachments/{attachmentId}")
     @Operation(summary = "Remove an attachment (soft-delete)")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun removeAttachment(
         @PathVariable id: UUID,
         @PathVariable attachmentId: UUID,
@@ -294,6 +310,7 @@ Only non-null fields in the request body are applied. `documentType` is immutabl
         description = "Hard-deletes a document. Only allowed for DRAFT or VOID documents."
     )
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize(RoleSets.APPROVER)
     fun delete(@PathVariable id: UUID) {
         val doc = sourceDocumentService.findById(id)
         SecurityUtils.requireOwnEntity(doc.entityId)
@@ -325,6 +342,7 @@ Evaluates a transaction payload against the four IFRS recognition criteria:
 4. **Measurable** — Can the amount be measured reliably?
 """
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun classify(
         @RequestBody @Parameter(description = "Unstructured transaction payload") payload: Any
     ): ApiResponse<ClassificationResult> =

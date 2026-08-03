@@ -3,10 +3,12 @@ package com.qesuite.accounting.shared.codegen.controller
 import com.qesuite.accounting.shared.codegen.service.CodeGeneratorService
 import com.qesuite.accounting.shared.codegen.service.EntityNumberConfigService
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -35,6 +37,7 @@ class CodeGeneratorController(
         description = "Returns what the next code would be **without** incrementing the sequence. " +
                 "Pass `moduleKey` to apply the org's configured prefix and custom format."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun peek(
         @RequestParam @Parameter(description = "Entity UUID", required = true) entityId: UUID,
         @RequestParam @Parameter(description = "Code prefix, e.g. CU, SUPP, INV", required = true) prefix: String,
@@ -56,6 +59,7 @@ class CodeGeneratorController(
         summary = "Consume and return the next code",
         description = "Atomically increments the sequence and returns the next code. Call this once per record creation if you need a pre-committed code. Normally, each create endpoint calls the service internally."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun generate(
         @RequestParam @Parameter(description = "Entity UUID", required = true) entityId: UUID,
         @RequestParam @Parameter(description = "Code prefix, e.g. CU, SUPP, INV", required = true) prefix: String
@@ -69,6 +73,7 @@ class CodeGeneratorController(
         summary = "Peek at the next code for all known prefixes",
         description = "Convenience endpoint — returns a map of prefix → next code for every registered prefix. Useful for dashboard or bulk form pre-population."
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun peekAll(
         @RequestParam @Parameter(description = "Entity UUID", required = true) entityId: UUID
     ): ApiResponse<Map<String, String>> {

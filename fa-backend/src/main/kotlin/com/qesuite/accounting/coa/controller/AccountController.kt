@@ -8,6 +8,7 @@ import com.qesuite.accounting.coa.service.AccountService
 import com.qesuite.accounting.coa.service.CreateAccountCommand
 import com.qesuite.accounting.coa.service.UpdateAccountCommand
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -17,6 +18,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -78,6 +80,7 @@ Use `parentAccountId` to retrieve only direct children of a specific parent node
     @ApiResponses(
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "List of accounts (may be empty)")
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getAllAccounts(
         @RequestParam @Parameter(description = "Tenant/company UUID", example = "550e8400-e29b-41d4-a716-446655440000") entityId: UUID,
         @RequestParam(required = false) @Parameter(description = "Filter by account type (ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE)") type: AccountType?,
@@ -112,6 +115,7 @@ Creates a new account in the Chart of Accounts.
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation failure (duplicate code/name, invalid currency, hierarchy depth exceeded)"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Circular reference detected or entity mismatch")
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun createAccount(@Valid @RequestBody command: CreateAccountCommand): ApiResponse<Account> {
         SecurityUtils.requireOwnEntity(command.entityId)
         return ApiResponse.success(accountService.createAccount(command))
@@ -126,6 +130,7 @@ Creates a new account in the Chart of Accounts.
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Account found"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account not found")
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getAccount(
         @PathVariable @Parameter(description = "Account UUID", example = "770e8400-e29b-41d4-a716-446655440002") id: UUID
     ): ApiResponse<Account> {
@@ -153,6 +158,7 @@ updated `accountSubtype` — they cannot be set directly.
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account not found"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Account code is immutable (has ledger history)")
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun updateAccount(
         @PathVariable @Parameter(description = "Account UUID to update") id: UUID,
         @Valid @RequestBody command: UpdateAccountCommand
@@ -180,6 +186,7 @@ visible in historical reports with `isActive=false` filter.
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Account not found"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Deactivation blocked — account has ledger history")
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun deactivateAccount(
         @PathVariable @Parameter(description = "Account UUID to deactivate") id: UUID
     ): ApiResponse<Unit> {
@@ -206,6 +213,7 @@ Example response for account `1100 - Trade Receivables` might return:
 Useful for rendering breadcrumb navigation in the COA tree UI.
 """
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getHierarchy(
         @PathVariable @Parameter(description = "Account UUID to retrieve the hierarchy for") id: UUID
     ): ApiResponse<List<Account>> {
@@ -229,6 +237,7 @@ If `asOfDate` is omitted, today's date is used.
 are not included.
 """
     )
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getBalance(
         @PathVariable @Parameter(description = "Account UUID") id: UUID,
         @RequestParam(required = false)
@@ -272,6 +281,7 @@ Requires a functional currency (e.g., USD) to be registered for the entity first
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Template applied"),
         io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid currency or entity")
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun applyTemplate(
         @RequestParam @Parameter(description = "Tenant/company UUID", example = "550e8400-e29b-41d4-a716-446655440000") entityId: UUID,
         @PathVariable("template_id") @Parameter(description = "Template identifier", schema = Schema(implementation = CoaTemplate::class)) template: CoaTemplate
@@ -296,6 +306,7 @@ the entire import is rolled back (transactional).
 complex multi-level hierarchy in a single API call.
 """
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun importCoa(
         @RequestParam @Parameter(description = "Tenant/company UUID for all imported accounts") entityId: UUID,
         @RequestBody commands: List<CreateAccountCommand>
@@ -310,6 +321,7 @@ complex multi-level hierarchy in a single API call.
         summary = "Rebuild account hierarchy from account codes",
         description = "Infers parent_account_id for all accounts with null parents using the X-ABCD code structure."
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun rebuildHierarchy(
         @RequestParam @Parameter(description = "Tenant/company UUID") entityId: UUID
     ): ApiResponse<Unit> {
@@ -329,6 +341,7 @@ Use this endpoint to provide real-time validation feedback in the COA creation U
 before submitting the full `POST /accounts` request.
 """
     )
+    @PreAuthorize(RoleSets.ADMIN_CONFIG)
     fun validateCode(
         @RequestParam @Parameter(description = "Tenant/company UUID") entityId: UUID,
         @RequestParam @Parameter(description = "Account code to validate (e.g. '1100')", example = "1100") code: String
