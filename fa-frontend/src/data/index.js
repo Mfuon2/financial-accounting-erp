@@ -513,6 +513,40 @@ export const BUDGETS = [
   },
 ]
 
+/* ---------- Expense Claims (demo) — Project.md Domain 1, workplan.md Phase 1 item 3 ---------- */
+export const EXPENSE_CLAIMS = [
+  {
+    id: "EXP-001", employeeId: "U-1003", claimDate: "2026-08-01", status: "REIMBURSED",
+    notes: "March client site visits", journalEntryId: "JE-2026-00099", rejectionReason: null,
+    lines: [
+      { id: "EXP-001-L1", accountCode: "5-3000", description: "Taxi to client site",  amount: 3500,  dateIncurred: "2026-08-01", receiptReference: "Receipt #4821" },
+      { id: "EXP-001-L2", accountCode: "5-3000", description: "Flight — Mombasa trip", amount: 12000, dateIncurred: "2026-08-02", receiptReference: "Receipt #4822" },
+      { id: "EXP-001-L3", accountCode: "5-3000", description: "Hotel — 1 night",       amount: 9000,  dateIncurred: "2026-08-02", receiptReference: "Receipt #4823" },
+    ],
+  },
+  {
+    id: "EXP-002", employeeId: "U-1005", claimDate: "2026-08-05", status: "SUBMITTED",
+    notes: null, journalEntryId: null, rejectionReason: null,
+    lines: [
+      { id: "EXP-002-L1", accountCode: "5-3000", description: "Fuel — client visits", amount: 4200, dateIncurred: "2026-08-04", receiptReference: null },
+    ],
+  },
+  {
+    id: "EXP-003", employeeId: "U-1003", claimDate: "2026-08-07", status: "DRAFT",
+    notes: "Pending receipts", journalEntryId: null, rejectionReason: null,
+    lines: [
+      { id: "EXP-003-L1", accountCode: "5-3000", description: "Office stationery", amount: 1500, dateIncurred: "2026-08-06", receiptReference: null },
+    ],
+  },
+  {
+    id: "EXP-004", employeeId: "U-1005", claimDate: "2026-07-20", status: "REJECTED",
+    notes: null, journalEntryId: null, rejectionReason: "Missing receipts — resubmit with documentation",
+    lines: [
+      { id: "EXP-004-L1", accountCode: "5-3000", description: "Client dinner", amount: 2200, dateIncurred: "2026-07-19", receiptReference: null },
+    ],
+  },
+]
+
 /* ---------- Sparkline data + dashboard time series ---------- */
 export const SPARK_CASH = [1.51, 1.62, 1.55, 1.74, 1.92, 2.10, 2.18, 2.34, 2.42, 2.55, 2.61, 2.71]
 export const SPARK_AR   = [1.20, 1.32, 1.40, 1.38, 1.52, 1.61, 1.55, 1.68, 1.74, 1.80, 1.79, 1.84]

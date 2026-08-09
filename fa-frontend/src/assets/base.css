@@ -697,6 +697,7 @@ a { color: inherit; text-decoration: none; }
 .badge.pending-approval { background: color-mix(in oklab, var(--warn) 16%, transparent); color: var(--warn); }
 .badge.approved     { background: color-mix(in oklab, var(--pos) 16%, transparent); color: var(--pos); }
 .badge.posted       { background: color-mix(in oklab, var(--pos) 18%, transparent); color: var(--pos); }
+.badge.reimbursed   { background: color-mix(in oklab, var(--pos) 18%, transparent); color: var(--pos); }
 .badge.void         { background: color-mix(in oklab, var(--neg) 14%, transparent); color: var(--neg); }
 .badge.rejected     { background: color-mix(in oklab, var(--neg) 14%, transparent); color: var(--neg); }
 .badge.error        { background: color-mix(in oklab, var(--neg) 14%, transparent); color: var(--neg); }
