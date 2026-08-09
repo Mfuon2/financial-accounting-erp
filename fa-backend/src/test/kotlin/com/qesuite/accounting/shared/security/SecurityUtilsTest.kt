@@ -89,4 +89,33 @@ class SecurityUtilsTest {
             SecurityUtils.requireOwnEntity(UUID.randomUUID())
         }
     }
+
+    // ── requireNotSelfApproval (maker-checker) ──────────────────────────────────
+
+    @Test
+    fun `requireNotSelfApproval rejects when the approver is the same person who created the record`() {
+        val userId = UUID.randomUUID()
+        val entityId = UUID.randomUUID()
+        val principal = UserContext(userId = userId, entityId = entityId, role = UserRole.SENIOR_ACCOUNTANT, email = "u@example.com")
+        SecurityContextHolder.getContext().authentication = UsernamePasswordAuthenticationToken(principal, null, emptyList())
+
+        val ex = assertThrows<com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException> {
+            SecurityUtils.requireNotSelfApproval(userId)
+        }
+        assertEquals("SELF_APPROVAL_NOT_ALLOWED", ex.errorCode)
+    }
+
+    @Test
+    fun `requireNotSelfApproval allows when the approver differs from the creator`() {
+        authenticateAs(UUID.randomUUID(), UserRole.SENIOR_ACCOUNTANT)
+
+        assertDoesNotThrow { SecurityUtils.requireNotSelfApproval(UUID.randomUUID()) }
+    }
+
+    @Test
+    fun `requireNotSelfApproval allows when the creator is unknown (null)`() {
+        authenticateAs(UUID.randomUUID(), UserRole.SENIOR_ACCOUNTANT)
+
+        assertDoesNotThrow { SecurityUtils.requireNotSelfApproval(null) }
+    }
 }

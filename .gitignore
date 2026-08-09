@@ -42,3 +42,9 @@ logs/
 # every demo-mode view depends on (COA, customers, invoices, budgets, ... fixtures). Found and fixed
 # 2026-08-09 while adding Budget demo fixtures and discovering they wouldn't actually commit.
 postgres-data/
+
+# ── Claude Code session-local state ────────────────────────────────────────────
+# Local settings + isolated-worktree agent checkouts — never repo content. Anchored with a
+# leading `/` (unlike the removed `data/` line above) so this only matches the repo root, not
+# any coincidentally-named `.claude/` directory that might legitimately exist elsewhere.
+/.claude/

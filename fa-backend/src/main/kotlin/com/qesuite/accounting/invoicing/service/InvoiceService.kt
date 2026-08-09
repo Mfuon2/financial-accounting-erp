@@ -23,6 +23,7 @@ import com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException
 import com.qesuite.accounting.shared.exceptions.ConflictException
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
+import com.qesuite.accounting.shared.security.SecurityUtils
 import com.qesuite.accounting.tax.service.TaxService
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -175,6 +176,9 @@ class InvoiceService(
                 context = mapOf("invoice_id" to invoiceId, "current_status" to invoice.status.name),
             )
         }
+
+        // Segregation of duties — the preparer cannot also be the approver.
+        SecurityUtils.requireNotSelfApproval(invoice.createdBy)
 
         // §14.3 — Credit-limit enforcement (Rule §6.6 — `CREDIT_LIMIT_EXCEEDED`).
         val customer = customerRepository.findById(invoice.customerId)

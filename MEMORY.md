@@ -254,7 +254,7 @@ Carried forward from the (uncommitted-deleted) internal gap analysis and bug rep
 where noted below. First Phase 0 task was to confirm which are still open — see the
 period-management line below for the result.
 
-**FOUND AND FIXED 2026-08-09, NOT YET COMMITTED — `fa-frontend/src/data/index.js` (the entire
+**FOUND AND FIXED 2026-08-09 (`00a61fc`) — `fa-frontend/src/data/index.js` (the entire
 demo-mode fixture dataset: COA, customers, suppliers, invoices, bills, journals, periods, payments,
 receipts, AR/AP ageing, trial balance, P&L/BS/cash-flow, everything) has *never been committed to
 git, in this repository's entire history*.** Found while adding the `BUDGETS` demo fixture and
@@ -266,11 +266,30 @@ whenever that `.gitignore` line was added. **Practical impact: a fresh `git clon
 today produces a frontend where every demo-mode view has empty/broken fixture data** — this is a
 real, severe, previously-undetected defect, not a hypothetical one; only local working trees that
 happened to have the file on disk before the ignore rule took effect were ever unaffected. Fixed by
-removing the offending `.gitignore` line (kept `postgres-data/`, unrelated and harmless). **Not yet
-committed** — `git status` now correctly shows `fa-frontend/src/data/` as untracked; a future agent
-(or this session, pending user confirmation) needs to `git add fa-frontend/src/data/ .gitignore` and
-commit this as its own fix, separate from the Budgeting feature commit, ideally before anything else
-lands, since every other frontend change in this repo's history has been silently exposed to this gap.
+removing the offending `.gitignore` line (kept `postgres-data/`, unrelated and harmless). Committed
+as its own fix (`00a61fc`), separate from the Budgeting feature commit, and pushed to `origin/main`.
+
+**FOUND AND FIXED 2026-08-09 (`a04dd7f`, `c0040b9`) — `BudgetLine`/`InvoiceLine` risked
+`LazyInitializationException`.** User feedback flagged this exact bug class ("a lazy `@ManyToOne`
+would throw `LazyInitializationException`"); a whole-application audit followed. Root cause pattern:
+a Kotlin `data class` entity with a lazy `@ManyToOne` back-reference (e.g. `BudgetLine.budget`,
+`InvoiceLine.invoice`) in its primary constructor gets a compiler-generated `equals`/`hashCode`/
+`toString` that touches that field — calling any of them on a managed-but-uninitialized proxy outside
+an active Hibernate session (a log line, a `Set`/`contains()` check, a test assertion on a detached
+instance) throws. Audited every `@ManyToOne` usage in the codebase (`JournalEntryLine`, `TaxRate`,
+`BudgetLine`, `BillItem`, `InvoiceLine`) — only two were actually at risk: `BudgetLine` (introduced
+this session, fixed immediately) and `InvoiceLine` (pre-existing, already-shipped, since before this
+session — a real latent defect in the live Invoicing module, not hypothetical).
+`JournalEntryLine`/`BillItem` are already plain classes; `TaxRate` uses `EAGER` fetch (no lazy proxy
+involved). Both fixed by converting to a plain `class` with explicit id-based `equals`/`hashCode` (the
+textbook-correct approach for JPA entities regardless of the laziness issue — field-based equality on
+a mutable entity also breaks hash-based collection contracts once a field changes post-insertion).
+No `.copy()`/destructuring usage found anywhere for either type, so the conversion was safe; `mvn
+clean test` confirmed no regressions both times. **Standing rule going forward**: never make a JPA
+entity holding a lazy `@ManyToOne`/`@OneToOne` a Kotlin `data class` — use a plain `class` with
+explicit id-based `equals`/`hashCode` instead, every time, on every new header+lines entity
+(Budgeting's `BankStatementLine`/`ExpenseClaimLine`-style children currently being built for Phase 1
+item 2/3 must follow this from the start, not need a follow-up fix).
 
 **RESOLVED — codebase-wide cross-entity data-isolation (IDOR) gap, plus a segregation-of-duties
 fast-follow, `ac16f42`..`3953672`, Engineering-owned and approved per AGENTS.md's Ownership Matrix

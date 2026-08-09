@@ -20,10 +20,18 @@ import java.util.UUID
  * has no meaningful standalone actual balance to compare a budget against) belonging to the same
  * `entityId` as the parent budget; `periodId` must likewise belong to that entity — both validated
  * in `BudgetService`, not at the JPA layer.
+ *
+ * Deliberately NOT a `data class`: `budget` is a lazy `@ManyToOne` back-reference, and a
+ * Kotlin-generated `equals`/`hashCode`/`toString` would touch it — calling any of those on a
+ * managed-but-uninitialized proxy outside an active Hibernate session (a log line, a `Set`/
+ * `contains()` check, a test assertion on a detached instance) throws
+ * `LazyInitializationException`. JPA entities should use id-based equality anyway (field-based
+ * equality on a mutable entity breaks hash-based collection contracts once a field changes after
+ * insertion), so that's what's implemented below instead of relying on the compiler default.
  */
 @Entity
 @Table(name = "budget_lines")
-data class BudgetLine(
+class BudgetLine(
     @Id
     @Column(name = "id", nullable = false)
     val id: UUID = UUID.randomUUID(),
@@ -50,4 +58,15 @@ data class BudgetLine(
 
     @Column(nullable = false)
     var modifiedAt: Instant = Instant.now(),
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is BudgetLine) return false
+        return id == other.id
+    }
+
+    override fun hashCode(): Int = id.hashCode()
+
+    override fun toString(): String =
+        "BudgetLine(id=$id, accountId=$accountId, periodId=$periodId, amount=$amount)"
+}
