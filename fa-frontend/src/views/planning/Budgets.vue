@@ -176,7 +176,7 @@ async function openVariance(b) {
       <div class="kpi-grid">
         <Kpi label="Draft budgets"    icon="doc"      :value="draftCount" />
         <Kpi label="Approved budgets" icon="check"    :value="approvedCount" />
-        <Kpi label="Total approved (budgeted)" icon="coin" :value="fmt(totalBudgeted)" />
+        <Kpi label="Total approved (budgeted)" icon="coin" :value="totalBudgeted" />
         <Kpi label="All budgets"     icon="docs"      :value="budgetList.length" />
       </div>
 
