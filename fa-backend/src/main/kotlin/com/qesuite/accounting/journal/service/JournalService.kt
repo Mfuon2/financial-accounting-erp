@@ -16,6 +16,7 @@ import com.qesuite.accounting.shared.codegen.service.EntityNumberConfigService
 import com.qesuite.accounting.shared.exceptions.ImmutableRecordException
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
+import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.media.Schema
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -96,6 +97,9 @@ class JournalService(
                 )
             )
         }
+
+        // Segregation of duties — the preparer cannot also be the approver.
+        SecurityUtils.requireNotSelfApproval(entry.createdBy)
 
         doubleEntryValidator.validate(entry)
         postingService.postJournalEntry(entry)

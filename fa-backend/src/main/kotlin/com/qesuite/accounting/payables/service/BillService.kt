@@ -19,6 +19,7 @@ import com.qesuite.accounting.payments.domain.PaymentMethod
 import com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
+import com.qesuite.accounting.shared.security.SecurityUtils
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -204,6 +205,9 @@ class BillService(
                 message   = "Cannot approve a bill in status ${bill.status}. Only DRAFT bills can be approved.",
             )
         }
+
+        // Segregation of duties — the preparer cannot also be the approver.
+        SecurityUtils.requireNotSelfApproval(bill.createdBy)
 
         val period = if (bill.periodId != null) {
             periodService.findById(bill.periodId!!)

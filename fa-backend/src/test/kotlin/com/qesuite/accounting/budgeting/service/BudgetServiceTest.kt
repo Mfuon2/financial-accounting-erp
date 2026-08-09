@@ -22,6 +22,7 @@ import com.qesuite.accounting.shared.exceptions.ValidationException
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -255,6 +256,49 @@ class BudgetServiceTest {
         every { budgetRepository.findById(budget.id) } returns Optional.of(budget)
 
         assertThrows<BusinessRuleViolationException> { budgetService.approve(budget.id) }
+    }
+
+    // ── maker-checker (segregation of duties) ───────────────────────────────────
+
+    @AfterEach
+    fun clearSecurityContext() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext()
+    }
+
+    private fun authenticateAs(userId: UUID) {
+        val principal = com.qesuite.accounting.shared.security.UserContext(
+            userId = userId, entityId = entityId,
+            role = com.qesuite.accounting.shared.security.UserRole.SENIOR_ACCOUNTANT, email = "u@example.com",
+        )
+        org.springframework.security.core.context.SecurityContextHolder.getContext().authentication =
+            org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal, null, emptyList())
+    }
+
+    @Test
+    fun `approve rejects the preparer approving their own budget`() {
+        val userId = UUID.randomUUID()
+        val budget = Budget(entityId = entityId, name = "Budget", status = BudgetStatus.DRAFT)
+        budget.createdBy = userId
+        every { budgetRepository.findById(budget.id) } returns Optional.of(budget)
+        authenticateAs(userId)
+
+        val ex = assertThrows<com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException> {
+            budgetService.approve(budget.id)
+        }
+        assertEquals("SELF_APPROVAL_NOT_ALLOWED", ex.errorCode)
+    }
+
+    @Test
+    fun `approve allows a different user to approve a budget they did not create`() {
+        val budget = Budget(entityId = entityId, name = "Budget", status = BudgetStatus.DRAFT)
+        budget.createdBy = UUID.randomUUID()
+        every { budgetRepository.findById(budget.id) } returns Optional.of(budget)
+        every { budgetRepository.save(budget) } returns budget
+        authenticateAs(UUID.randomUUID())
+
+        val result = budgetService.approve(budget.id)
+
+        assertEquals(BudgetStatus.APPROVED, result.status)
     }
 
     @Test
