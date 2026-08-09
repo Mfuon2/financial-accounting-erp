@@ -19,10 +19,18 @@ import java.util.UUID
  * §14.1 — Invoice Line Item Entity
  * Represents a line item on an invoice. Multiple lines aggregate to the invoice total.
  * Each line maps to a revenue account and optionally a tax rate.
+ *
+ * Deliberately NOT a `data class`: `invoice` is a lazy `@ManyToOne` back-reference, and a
+ * Kotlin-generated `equals`/`hashCode`/`toString` would touch it — calling any of those on a
+ * managed-but-uninitialized proxy outside an active Hibernate session (a log line, a `Set`/
+ * `contains()` check, a test assertion on a detached instance) throws
+ * `LazyInitializationException`. JPA entities should use id-based equality anyway (field-based
+ * equality on a mutable entity breaks hash-based collection contracts once a field changes after
+ * insertion), so that's what's implemented below instead of relying on the compiler default.
  */
 @Entity
 @Table(name = "invoice_lines")
-data class InvoiceLine(
+class InvoiceLine(
     @Id
     @Column(name = "id", nullable = false)
     @Schema(example = "550e8400-e29b-41d4-a716-446655440010")
@@ -85,7 +93,18 @@ data class InvoiceLine(
     @Column(nullable = false)
     @Schema(description = "When this line was last modified")
     var modifiedAt: Instant = Instant.now()
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is InvoiceLine) return false
+        return id == other.id
+    }
+
+    override fun hashCode(): Int = id.hashCode()
+
+    override fun toString(): String =
+        "InvoiceLine(id=$id, lineNumber=$lineNumber, accountId=$accountId, lineTotal=$lineTotal)"
+}
 
 /**
  * §14.1 — IFRS 15 Performance Obligation Type
