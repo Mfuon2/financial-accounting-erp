@@ -35,5 +35,10 @@ Thumbs.db
 logs/
 
 # ── Docker volumes / data ─────────────────────────────────────────────────────
+# NOTE: docker-compose.yml uses named Docker volumes (postgres_data, redis_data, ...), not host
+# bind-mounts, so no bind-mounted directory actually needs ignoring here. A bare `data/` pattern
+# used to be here and — because gitignore patterns with no leading `/` match at any depth — it was
+# unintentionally also matching and un-tracking fa-frontend/src/data/index.js, the real source file
+# every demo-mode view depends on (COA, customers, invoices, budgets, ... fixtures). Found and fixed
+# 2026-08-09 while adding Budget demo fixtures and discovering they wouldn't actually commit.
 postgres-data/
-data/
