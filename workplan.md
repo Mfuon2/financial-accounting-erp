@@ -105,16 +105,20 @@ baseline with no unverified "unverified" critical bugs remaining.
 **Goal:** Finish the domain the product already mostly covers, so it's a genuinely complete
 "Financial Operations" offering before expanding outward.
 
-- [ENGINEERING-COMPLETE, ACCOUNTING-APPROVED, NOT YET COMMITTED] **Budgeting module:** budget
-  entities, budget lines by account/period, budget-vs-actual reporting. Built 2026-08-09 —
+- [DONE] **Budgeting module:** budget entities, budget lines by account/period, budget-vs-actual
+  reporting. Built and committed 2026-08-09 (`00a61fc`..`1d1ce3b`, pushed to `origin/main`) —
   `com.qesuite.accounting.budgeting.*` (backend), `fa-frontend/src/views/planning/Budgets.vue`
   (frontend). 118/118 backend tests pass (only 2 known pre-existing failures), `npm run build`
   clean, independently reviewed and **APPROVED** by the Financial Systems Architect via actual
   mutation-testing (not read-through) of both the variance-calculation sign convention and the
-  IDOR/role-gate checks. **Not yet committed to git; frontend not yet visually verified in a
-  browser** (environment couldn't launch one this session — see MEMORY.md's "Handover — Budgeting
-  Module" section for full detail and the exact manual verification steps to run first). Treat as
-  `IN PROGRESS`, not `DONE`, until those two items close.
+  IDOR/role-gate checks. Frontend also live-verified in a real browser (headless Google Chrome via
+  CDP, not the ad-hoc-signed `playwright-core` Chromium build which gets SIGKILL'd in this
+  sandbox — see MEMORY.md's Handover section for the working technique), which caught and fixed two
+  real bugs a build/test pass alone could not have caught: a double-formatted KPI, and a
+  demo-mode-only gap in `accounts.js` letting header accounts appear as budgetable (this second one
+  was pre-existing and app-wide, not Budgeting-specific — also fixed `ChartOfAccounts.vue`'s "Header"
+  badge as a result). Remaining, non-blocking: OpenAPI docs not manually eyeballed (see MEMORY.md
+  Handover, item 1).
 - **Cash & Bank Management:** bank statement import, transaction matching against ledger entries,
   reconciliation status tracking (currently only a "Bank Statement" source-document type exists,
   with no reconciliation engine).

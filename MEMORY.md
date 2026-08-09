@@ -111,42 +111,72 @@ this codebase's immutability-after-approval convention elsewhere.
   — a redundant read, not a defect, and consistent with the existing codebase pattern elsewhere; fix
   opportunistically if this controller is touched again, not urgent enough to block on.
 
-### What is NOT done — pick up here
+### Update 2026-08-09 (later same day): committed, and live-verified in a real browser
 
-1. **Not committed to git.** Everything above sits in the working tree. Before committing: split
-   into logical commits (Budgeting feature; the unrelated Phase 0 governance/security fixes from the
-   same session listed above are separate units), get explicit user confirmation before pushing per
-   this repo's operating procedures (CLAUDE.md §20-22).
-2. **Frontend not visually/interactively verified in a real browser.** `npm run build` passing proves
-   it compiles and every import resolves — it does NOT prove the UI actually renders correctly,
-   the "New budget" modal's dynamic line rows work, or the variance report table displays real data
-   correctly. I attempted this (downloaded a matching headless Chromium via `playwright-core` since
-   `chromium-cli` wasn't available in this environment) but the browser binary was killed by the OS
-   immediately on launch (exit 137/SIGKILL) even after clearing quarantine attributes — a system-level
-   restriction in this sandbox, not a code problem. **A future agent working in an environment where a
-   browser can actually launch should do this before considering the frontend done**: start the dev
-   server (`npm run dev` in `fa-frontend`), open `/budgets` in demo mode (default), and manually
-   click through: list renders with the 2 demo budgets (`BUD-001` APPROVED, `BUD-002` DRAFT) → "New
-   budget" modal opens, account/period dropdowns populate, add/remove line rows work → "Variance"
-   button opens a report with budgeted/actual/variance columns for `BUD-001` → Approve/Void buttons
-   appear only for the right statuses/roles.
-3. **No OpenAPI/Swagger manual check.** `@Operation`/`@Tag` annotations are in place on
+Both blockers below (as originally written) are now resolved:
+
+- **Committed and pushed.** Split into 8 separate commits on `main` (`00a61fc`..`1d1ce3b`): the
+  `.gitignore`/demo-data fix, the Budgeting feature itself, the `CFO`→`CONTROLLER_CFO` fix, the
+  `GlobalApprovalController` IDOR/SoD fix, the `DOCUMENT_TYPE` category work, docs, and two more
+  bug fixes found during live UI verification (next bullet). Pushed to `origin/main`.
+- **Frontend live-verified in a real browser, and this caught two real bugs `npm run build` could
+  never have caught.** The originally-downloaded `playwright-core` Chromium build kept getting
+  SIGKILL'd on launch in this sandbox (as first written below) — the actual fix was to drive the
+  **already-installed, properly signed/notarized Google Chrome** instead: `open -a "Google Chrome"
+  --args --headless=new --disable-gpu --remote-debugging-port=9222`, then
+  `chromium.connectOverCDP('http://localhost:9222')` from `playwright-core`. This works because the
+  restriction was specifically about launching an ad-hoc-signed downloaded binary, not about
+  headless Chrome or sandboxing in general — **note this for any future browser-verification need in
+  this environment.** One more gotcha worth recording: the app uses `createWebHashHistory` (main.js),
+  so `page.goto('.../budgets')` silently does nothing — the correct URL is `.../#/budgets`.
+  - Confirmed the list view renders both demo budgets with correct data, the variance report modal
+    shows correct budgeted/actual/variance math (cross-checked by hand against the demo fixture),
+    and there were zero console errors throughout.
+  - Also confirmed demo mode's `useAuth` never populates `currentUser` at all by design (`init()`
+    early-returns before reading `sessionStorage` when `isDemo.value`), so role-gated UI
+    (`canManage`/`canApprove`) is invisible-by-default in every demo session, app-wide — not a
+    Budgeting-specific issue. Verified the role-gated paths anyway by temporarily patching
+    `useAuth.js`'s `init()` to seed a demo user, screenshotting, then **fully reverting the patch**
+    (confirmed via `git diff` returning clean) — same mutate-then-revert technique the earlier
+    independent Financial Systems Architect review used.
+  - **Bug found and fixed (`1d1ce3b`):** the "Total approved (budgeted)" KPI showed `—` instead of a
+    number. Root cause: `Kpi.vue` formats its `value` prop internally via its own `fmt()` call;
+    `Budgets.vue` was passing an *already-formatted* string (`fmt(totalBudgeted)`, e.g.
+    `"2,780,000.00"`) into that prop, so `Kpi`'s internal `fmt()` received a comma-containing string,
+    failed `isNaN()`, and fell back to its placeholder. Fixed by passing the raw number, matching
+    every other `Kpi` usage in the same component.
+  - **Bug found and fixed (`faf39f0`), NOT specific to Budgeting — a pre-existing, silent, app-wide
+    gap:** the account-picker dropdown showed header accounts (e.g. `1-0000 · ASSETS`) as selectable,
+    which the backend correctly rejects. Root cause: `fa-frontend/src/api/accounts.js`'s
+    `demoAccounts()` never mapped the raw COA fixture's `type` (`HEADER`/`POST`) into the API-shaped
+    `isHeader` field, so it read as `undefined` for every account in demo mode — meaning
+    `!a.isHeader`-style filters (mine, and presumably any other consumer) silently did nothing.
+    Fixed with one line; **also confirmed this restores `ChartOfAccounts.vue`'s "Header" badge**,
+    which had presumably never rendered in demo mode either — a second, independent regression this
+    one gap caused, found by checking a sibling view once the root cause was known (the same
+    "regression-check peer features" habit this session's earlier IDOR work established).
+
+### What is still NOT done — pick up here
+
+1. **No OpenAPI/Swagger manual check.** `@Operation`/`@Tag` annotations are in place on
    `BudgetController` following the exact pattern of `PaymentController`/`BillController`, but nobody
    has loaded `/docs` (Scalar UI) or `/v3/api-docs.json` and eyeballed the generated schema for the
    new endpoints. Quick check, not done yet.
-4. **README.md's module inventory not updated** — CLAUDE.md §12 requires this in the same change
-   that ships a new module. Not done.
-5. **Real Phase 1 items still fully unbuilt** (Budgeting was only item 1 of the list in
+2. **Real Phase 1 items still fully unbuilt** (Budgeting was only item 1 of the list in
    `workplan.md` Phase 1): Cash & Bank Management (bank statement import + reconciliation matching),
    Expense Management (T&E), historical period-balance snapshots, external FX rate feed integration,
    communication/document-delivery gaps (AR statement email, receipt resend, bulk source-doc upload).
-6. **Deliberately out of scope for this first cut, candidates for later iteration on Budgeting
+3. **Deliberately out of scope for this first cut, candidates for later iteration on Budgeting
    itself** (not blocking, just not built): CSV/Excel budget import, multi-year budget
    copy-forward/rollup, a cost-center/department dimension on `BudgetLine` (this depends on Phase 2's
    Cost Accounting, per `workplan.md` — don't build it early), budget revision history beyond simple
    void-and-recreate, and a Dashboard KPI tile surfacing budget utilization (the existing
    `DashboardService`/`Dashboard.vue` were not touched — Budgeting is currently only reachable via its
    own nav item, not summarized on the main dashboard).
+4. **Not re-audited: does `accounts.js`'s `isHeader` gap (just fixed) have siblings?** The fix above
+   was found by accident while testing an unrelated feature. Worth a quick, deliberate check of
+   whether any other demo-mode API client silently drops a field that a real consumer filters on —
+   the same class of bug, not yet swept for systematically.
 
 ---
 
