@@ -1,10 +1,25 @@
 # MEMORY.md — Project Memory
 
-**Last updated:** 2026-08-02 (Batch 3: BUG-25 permanent regression test landed and approved
-(`ac7da9c`); standalone credit-notes endpoint landed and approved (`8eeee49`); old ROADMAP.md-derived
-"Tier 1" gap list re-verified and found already resolved in current code — documentation correction,
-no code change; **new codebase-wide IDOR finding logged as top priority, fix cycle starting
-immediately**)
+**Last updated:** 2026-08-09 (Batch 5: **Phase 0 governance bookkeeping closed** — see Batch 4 detail
+below — **and Phase 1 started**: built the Budgeting module (Project.md Domain 1's last major gap
+alongside Cash/Bank Management and Expense Management), the first phase 1 item in `workplan.md`.
+Engineering-complete and Financial-Systems-Architect-**APPROVED** end to end (see "Budgeting module"
+under Known Issues/Current Milestone below) — the first brand-new financial-domain module built
+since the governance model + `AGENTS.md` three-persona review process was adopted. **Read "Handover
+— Budgeting Module" below before touching this module further**, it records exactly what's built,
+what's verified, and what a future agent should do next.)
+
+**Batch 4 (same day, recorded for continuity):** this update closed a real gap in Delivery Manager
+bookkeeping, not new engineering from scratch — the codebase-wide IDOR fix cycle logged 2026-08-02 as
+"starting immediately" actually ran to completion across `ac16f42`..`3953672` and was never recorded
+here as done; likewise the dynamic category-management work for `PAYMENT_TERM`/`PAYMENT_METHOD`
+(`986fd63`..`aa43b7a`) merged and was Financial-Systems-Architect-approved but also never recorded.
+Both are now recorded below. In addition, that session's independent re-verification pass fixed one
+real, live bug found in the earlier sweep but left un-fixed (`'CFO'` vs `'CONTROLLER_CFO'` role
+string in `PaymentController`/`ReceiptController`) and found + fixed **one new live IDOR/SoD gap the
+original sweep missed entirely**: `GlobalApprovalController` had no entity-ownership check and no
+role gate at all. Also closed: `DOCUMENT_TYPE`, the third and last of the three hardcoded-category
+violations logged 2026-08-02, following the exact `PAYMENT_TERM`/`PAYMENT_METHOD` precedent.
 
 This is the single source of truth for "where things stand." Every completed unit of work updates
 this file per AGENTS.md's Delivery Manager responsibilities. See [workplan.md](workplan.md) for the
@@ -15,15 +30,123 @@ vision this project is working toward.
 
 ## Current Milestone
 
-**Phase 0 — Stabilize & Govern.** The repository already contains a substantial, working product
-(QeSuite FA). Before any Project.md-scale expansion, the immediate milestone is: reconcile
-uncommitted work, resolve confirmed critical bugs, and put the three-agent governance model into
-effect for all subsequent work. See `workplan.md` Phase 0.
+**Phase 1 — Financial Operations Completion** (Project.md Domain 1), just started. Phase 0's
+governance/stabilization work is bookkeeping-complete (see below); Phase 0's remaining items are
+normal-priority infrastructure backlog, not blockers, and continue in parallel. Phase 1's goal per
+`workplan.md`: finish the domain the product already mostly covers (Budgeting, Cash & Bank
+Management, Expense Management, historical period-balance snapshots, FX rate feed, communication
+gaps) before expanding to Project.md's other five domains.
+
+**Phase 0 recap (bookkeeping-complete 2026-08-09):** The codebase-wide IDOR/RBAC fix cycle and the
+three hardcoded-category violations (Phase 0's two largest concrete items) are **all fully resolved
+and recorded** — see Known Issues and Open Risks/Blockers below. Phase 0 is not formally "closed"
+(that requires the Delivery Manager to explicitly re-sequence `workplan.md`, not implied by starting
+Phase 1 work) — its remaining items (IFRS 15 over-time revenue-recognition job, Spring Batch pipeline
+wiring, COA template seed data, M-Pesa session table, `InvoiceService.kt:574-575` filter-priority
+bug, two commented-out test files) stay open and should be picked up opportunistically alongside
+Phase 1 feature work, not treated as blocking it.
 
 ## Current Sprint
 
-Not yet started under the new governance model — this baseline was just established. First sprint
-should be scoped by the Delivery Manager from Phase 0's task list in `workplan.md`.
+**Budgeting module (Phase 1, item 1) — Engineering + Financial Systems Architect APPROVED, see
+"Handover — Budgeting Module" below for full detail and what's next.** This is the first
+new-financial-domain module built end-to-end under the three-persona governance model (previous
+Phase 0 work was fixes/hardening to existing modules, not a new domain). Next sprint should be
+scoped by the Delivery Manager from Phase 1's remaining items (Cash & Bank Management, Expense
+Management, ...) in `workplan.md`, picking up the Handover section's "Not done" list first.
+
+---
+
+## Handover — Budgeting Module (Phase 1, item 1)
+
+**Status: Engineering-complete, Financial Systems Architect APPROVED, not yet committed to git,
+frontend not visually verified in a browser (environment limitation, see below). Read this whole
+section before touching the module.**
+
+### What this module is
+
+Project.md Domain 1 (Financial Operations) lists Budgeting as a core capability; `workplan.md`
+Phase 1 lists it as item 1 (alongside Cash & Bank Management and Expense Management, both still
+unbuilt). A `Budget` (header: name, status, total, notes) has `BudgetLine`s (account + period +
+amount, one row per account-per-period). It never posts a journal entry — it's a planning artifact,
+compared against actual ledger activity only at read time via a variance report endpoint. Lifecycle:
+`DRAFT → APPROVED` or `→ VOID` (from either) — corrections are void-and-recreate, not edits, matching
+this codebase's immutability-after-approval convention elsewhere.
+
+### Files added/changed (none committed yet — see "Not done" below)
+
+- Backend, new: `fa-backend/src/main/kotlin/com/qesuite/accounting/budgeting/{domain,repository,service,controller,dto}/*`
+  (`Budget.kt`, `BudgetLine.kt`, `BudgetRepository.kt`, `BudgetService.kt`, `BudgetController.kt`,
+  `BudgetingDtos.kt`), `V43__Create_budgets_and_budget_lines_tables.sql`.
+- Backend, new tests: `BudgetServiceTest.kt` (16 tests), `BudgetControllerSecurityTest.kt` (7 tests).
+- Frontend, new: `fa-frontend/src/api/budgets.js`, `fa-frontend/src/views/planning/Budgets.vue`.
+- Frontend, changed: `api/index.js` (registered `budgets`), `data/index.js` (added `BUDGETS` demo
+  fixture), `router/index.js` (added `/budgets` route + breadcrumb), `AppSidebar.vue` (added
+  `Budgeting` nav group).
+- Unrelated-but-same-session changes also sitting uncommitted: the Phase 0 governance bookkeeping
+  (MEMORY.md/workplan.md edits), the `CFO`→`CONTROLLER_CFO` fix, the `GlobalApprovalController`
+  IDOR/SoD fix (+ its own new test file under `test/kotlin/.../approvals/`), the `DOCUMENT_TYPE`
+  category work, and `CategoryTypeTest.kt` — see Batch 4 above for that detail. All of it is one
+  uncommitted working tree right now; a future agent should treat these as logically separate units
+  when committing (don't squash a security fix and a new feature into one commit).
+
+### What's verified, and how (per AGENTS.md's "run it, don't read it" bar)
+
+- `mvn clean test`: **118 tests, only the 2 known pre-existing failures** (`UserServiceTest`,
+  `CoreAccountingIntegrationTest` — both predate this work, documented in Known Issues below), zero
+  regressions. Run this again after any further change before trusting the count.
+- `npm run build`: clean. This caught one real bug during development (wrong `Kpi.vue` import path —
+  fixed).
+- **Independent Financial Systems Architect review (separate subagent, not self-review) — APPROVED**,
+  and did real mutation-testing, not read-through: (1) flipped the `NormalBalance.DEBIT` branch in
+  `BudgetService.actualForAccountInPeriod`, confirmed exactly the 2 variance-netting tests failed,
+  reverted, confirmed 16/16 pass again — proves the variance sign convention (matches
+  `DashboardService.getTbSummary`'s exact pattern) is real, not a tautological test. (2) Removed the
+  `SecurityUtils.requireOwnEntity(...)` call from `BudgetController.approve`, confirmed the
+  cross-entity security test failed (500 instead of 403), reverted, confirmed 7/7 pass again — proves
+  the IDOR check is load-bearing. (3) Confirmed header-account rejection and entity-isolation
+  validation in `validateLine()`, and `MONEY_SCALE=6`/`HALF_EVEN` rounding consistency with
+  `InvoiceService`. One non-blocking note from that review: each mutating controller action calls
+  `budgetService.findById(id)` twice (once for the ownership check, once inside the service method)
+  — a redundant read, not a defect, and consistent with the existing codebase pattern elsewhere; fix
+  opportunistically if this controller is touched again, not urgent enough to block on.
+
+### What is NOT done — pick up here
+
+1. **Not committed to git.** Everything above sits in the working tree. Before committing: split
+   into logical commits (Budgeting feature; the unrelated Phase 0 governance/security fixes from the
+   same session listed above are separate units), get explicit user confirmation before pushing per
+   this repo's operating procedures (CLAUDE.md §20-22).
+2. **Frontend not visually/interactively verified in a real browser.** `npm run build` passing proves
+   it compiles and every import resolves — it does NOT prove the UI actually renders correctly,
+   the "New budget" modal's dynamic line rows work, or the variance report table displays real data
+   correctly. I attempted this (downloaded a matching headless Chromium via `playwright-core` since
+   `chromium-cli` wasn't available in this environment) but the browser binary was killed by the OS
+   immediately on launch (exit 137/SIGKILL) even after clearing quarantine attributes — a system-level
+   restriction in this sandbox, not a code problem. **A future agent working in an environment where a
+   browser can actually launch should do this before considering the frontend done**: start the dev
+   server (`npm run dev` in `fa-frontend`), open `/budgets` in demo mode (default), and manually
+   click through: list renders with the 2 demo budgets (`BUD-001` APPROVED, `BUD-002` DRAFT) → "New
+   budget" modal opens, account/period dropdowns populate, add/remove line rows work → "Variance"
+   button opens a report with budgeted/actual/variance columns for `BUD-001` → Approve/Void buttons
+   appear only for the right statuses/roles.
+3. **No OpenAPI/Swagger manual check.** `@Operation`/`@Tag` annotations are in place on
+   `BudgetController` following the exact pattern of `PaymentController`/`BillController`, but nobody
+   has loaded `/docs` (Scalar UI) or `/v3/api-docs.json` and eyeballed the generated schema for the
+   new endpoints. Quick check, not done yet.
+4. **README.md's module inventory not updated** — CLAUDE.md §12 requires this in the same change
+   that ships a new module. Not done.
+5. **Real Phase 1 items still fully unbuilt** (Budgeting was only item 1 of the list in
+   `workplan.md` Phase 1): Cash & Bank Management (bank statement import + reconciliation matching),
+   Expense Management (T&E), historical period-balance snapshots, external FX rate feed integration,
+   communication/document-delivery gaps (AR statement email, receipt resend, bulk source-doc upload).
+6. **Deliberately out of scope for this first cut, candidates for later iteration on Budgeting
+   itself** (not blocking, just not built): CSV/Excel budget import, multi-year budget
+   copy-forward/rollup, a cost-center/department dimension on `BudgetLine` (this depends on Phase 2's
+   Cost Accounting, per `workplan.md` — don't build it early), budget revision history beyond simple
+   void-and-recreate, and a Dashboard KPI tile surfacing budget utilization (the existing
+   `DashboardService`/`Dashboard.vue` were not touched — Budgeting is currently only reachable via its
+   own nav item, not summarized on the main dashboard).
 
 ---
 
@@ -101,8 +224,83 @@ Carried forward from the (uncommitted-deleted) internal gap analysis and bug rep
 where noted below. First Phase 0 task was to confirm which are still open — see the
 period-management line below for the result.
 
-**TOP PRIORITY — HIGH, IN PROGRESS (fix cycle started): codebase-wide cross-entity data-isolation
-(IDOR) gap.** The Financial Systems Architect's review of the new `CreditNoteController` (below)
+**FOUND AND FIXED 2026-08-09, NOT YET COMMITTED — `fa-frontend/src/data/index.js` (the entire
+demo-mode fixture dataset: COA, customers, suppliers, invoices, bills, journals, periods, payments,
+receipts, AR/AP ageing, trial balance, P&L/BS/cash-flow, everything) has *never been committed to
+git, in this repository's entire history*.** Found while adding the `BUDGETS` demo fixture and
+noticing `git status` didn't pick up the change. Root cause: `.gitignore`'s `data/` pattern (line 39,
+meant to ignore a Docker Compose bind-mount that doesn't actually exist — `docker-compose.yml` uses
+named volumes, not host bind-mounts, so nothing ever needed that line) has no leading `/`, so it
+matches `fa-frontend/src/data/` too, silently un-tracking a real, load-bearing source file since
+whenever that `.gitignore` line was added. **Practical impact: a fresh `git clone` of this repository
+today produces a frontend where every demo-mode view has empty/broken fixture data** — this is a
+real, severe, previously-undetected defect, not a hypothetical one; only local working trees that
+happened to have the file on disk before the ignore rule took effect were ever unaffected. Fixed by
+removing the offending `.gitignore` line (kept `postgres-data/`, unrelated and harmless). **Not yet
+committed** — `git status` now correctly shows `fa-frontend/src/data/` as untracked; a future agent
+(or this session, pending user confirmation) needs to `git add fa-frontend/src/data/ .gitignore` and
+commit this as its own fix, separate from the Budgeting feature commit, ideally before anything else
+lands, since every other frontend change in this repo's history has been silently exposed to this gap.
+
+**RESOLVED — codebase-wide cross-entity data-isolation (IDOR) gap, plus a segregation-of-duties
+fast-follow, `ac16f42`..`3953672`, Engineering-owned and approved per AGENTS.md's Ownership Matrix
+(security/RBAC is an area Agent 1 owns & approves outright — no Agent 2 gate applies).** This item
+was logged below as "IN PROGRESS, fix cycle started" on 2026-08-02 and the fix cycle did in fact run
+to completion the same day; it was simply never marked resolved here until this update. Sequence:
+- `ac16f42`/`b91def1`/`93f5ff3`/`1d1a1de` — added `SecurityUtils.requireOwnEntity(...)` ownership
+  checks to every one of the ~20 affected controllers (`ledger`/`journal`/`period`,
+  `party`/`invoicing`/`payables`, `assets`/`fx`/`tax`, `coa`/`compliance`/`codegen`/`source-doc`),
+  bringing them up to the pattern `OrganizationController`/`ApiKeyController`/`UserController`
+  already used correctly.
+- `626fc6d` — a **second** Financial Systems Architect audit pass (peer-comparison, not just
+  read-through) found a **different, equally severe** gap in the same 13 controllers: zero
+  role-based access control at all — any authenticated role, including `DATA_ENTRY`, could close/
+  reopen periods, dispose fixed assets, approve/void invoices, run FX revaluation, or rebuild the
+  COA. Introduced `RoleSets.kt` (named `@PreAuthorize` constants derived from already-correct
+  precedent in the codebase, not invented independently) and applied it. This same commit also found
+  and fixed a **pre-existing, unrelated bug**: `AccessDeniedException` had no handler more specific
+  than the generic 500 catch-all, so every `@PreAuthorize` denial in the **entire application**
+  (not just this sweep) returned 500 instead of 403 — fixed in `GlobalExceptionHandler.kt`.
+- `e14c455`/`bb33b3d`/`e32a070`/`3953672` — applied `RoleSets` to the remaining controller groups
+  (`period`/`accounting-cycle`, `party`/`invoicing`, `assets`/`fx`/`tax`, `coa`/`codegen`/
+  `source-document`). `3953672`'s commit message documents the exact role assigned to every one of
+  the ~40+ gated endpoints and the precedent each was matched to.
+- **Flagged but deliberately deferred at the time, fixed 2026-08-09 (this update):** `626fc6d`'s own
+  commit message flagged that `PaymentController` and `ReceiptController` hand-rolled the SpEL string
+  `hasAnyRole(...,'CFO',...)` instead of using the real `UserRole` enum value `'CONTROLLER_CFO'` —
+  meaning every `CONTROLLER_CFO` user was silently denied on every gated Payment/Receipt endpoint
+  (create, match, approve, post, reverse, generate, issue, void). Migrated both controllers onto
+  `RoleSets` constants (all 12 endpoints map exactly to existing constants/precedent, no new roles
+  invented). Verified via `mvn clean test`: 93 tests, same 2 known pre-existing failures as baseline,
+  no regressions.
+- **New finding, not in the original sweep's scope, found and fixed 2026-08-09 during independent
+  re-verification:** `GlobalApprovalController` (`/api/v1/approvals/{id}/approve|reject`) was missed
+  by the entire sweep above — it has no `@PreAuthorize` at all and performed no entity-ownership
+  check before dispatching to `JournalService.postEntry`/`InvoiceService.approve`/
+  `BillService.approveBill` (and their reject/void counterparts), none of which check ownership
+  themselves (that check normally lives in the bypassed entity-specific controller). Concretely: any
+  authenticated user of **any role**, from **any entity**, could approve or reject another entity's
+  pending journal entry, invoice, or bill by guessing/enumerating its UUID through this one global
+  queue endpoint — a full IDOR **and** a complete segregation-of-duties bypass, hiding behind a
+  controller that every peer controller in the sweep above was individually checked but this one was
+  never enumerated. Fixed by adding `GlobalApprovalService.resolveEntityId(id, type)` (looked up
+  before dispatch, matching the pattern every other controller in the sweep uses) plus
+  `SecurityUtils.requireOwnEntity(...)` and `@PreAuthorize(RoleSets.APPROVER)` on both endpoints —
+  `APPROVER` matches the exact gate already used by the three actions this queue routes to
+  (`JournalController.approve`/`InvoiceController.approve`/`BillController.approveBill`, all
+  `SENIOR_ACCOUNTANT`/`CONTROLLER_CFO`/`SYSTEM_ADMIN`). New regression test
+  `GlobalApprovalControllerSecurityTest` (4 tests: cross-entity 403, role-gate 403, happy path 200)
+  proves both the IDOR and the SoD gate, not just read-through. `mvn clean test`: 93 tests, same 2
+  known pre-existing failures, no regressions.
+- This confirms the exact lesson already recorded below under Lessons Learned — peer-comparison
+  review surfaces systemic gaps a narrower "does this one endpoint work" check misses — applies
+  recursively: the second audit pass that found the RBAC gap in `626fc6d` was itself not exhaustive
+  enough to catch `GlobalApprovalController`, which required a **third**, independent pass to find.
+  Any future security review of this codebase should explicitly enumerate every `@RestController`
+  and check it against this list, not assume "the sweep already covered controllers of this kind."
+
+**Historical record of the original finding (2026-08-02), preserved for context:** The Financial
+Systems Architect's review of the new `CreditNoteController` (below)
 regression-checked it against its sibling controllers per AGENTS.md's "regression-check peer
 features" mandate, and found the gap is systemic, not local: of the controllers that accept a
 client-supplied `entityId` request parameter, only **3** actually verify it matches the authenticated
@@ -226,16 +424,26 @@ ready overall):**
   elimination, bank reconciliation, payroll journal import, role-level data filters below
   entity-level isolation.
 
-**New — hardcoded-category violations of CLAUDE.md §2's configuration-driven principle (surfaced
-during this session's work, not fixed, not blocking, candidates for a future dynamic-management
-screen):**
-- Duplicated `PAYMENT_TERMS` arrays hardcoded in `fa-frontend/src/views/parties/Suppliers.vue` and
-  `fa-frontend/src/views/parties/Customers.vue`.
-- Duplicated/inconsistent `PAYMENT_METHODS` arrays hardcoded in
-  `fa-frontend/src/views/payables/Bills.vue`, `fa-frontend/src/views/revenue/Payments.vue`, and
-  `fa-frontend/src/views/revenue/Invoices.vue`.
-- Hardcoded `DOC_TYPES` array in `fa-frontend/src/views/ledger/SourceDocs.vue` — should follow the
-  existing configurable document-numbering pattern (`shared/codegen`) instead of a literal array.
+**RESOLVED — all three hardcoded-category violations of CLAUDE.md §2's configuration-driven
+principle, now closed via one generic `Category`/`CategoryType` system (`shared/categories`,
+`V41`/`V42` migrations, `setup/Categories.vue` admin screen, `useCategoryCache.js`):**
+- `PAYMENT_TERM` (was: duplicated `PAYMENT_TERMS` arrays in `Suppliers.vue`/`Customers.vue`) —
+  `986fd63`..`aa43b7a`, Financial Systems Architect **APPROVED** (seed-data fidelity vs. the old
+  hardcoded arrays confirmed, `BillService.parsePaymentTermsDays` due-date calculation unaffected).
+  This and the next item merged 2026-08-03 but were never recorded as resolved here until this
+  update — pure Delivery Manager bookkeeping gap, not new work.
+- `PAYMENT_METHOD` (was: duplicated/inconsistent `PAYMENT_METHODS` arrays in `Bills.vue`/
+  `Payments.vue`/`Invoices.vue`) — same commits, same approval; codes verified to still match
+  `PaymentMethod` enum constant names so `Payment`/`BillPayment` creation keeps deserializing.
+- `DOCUMENT_TYPE` (was: hardcoded `DOC_TYPES` array in `SourceDocs.vue`) — closed 2026-08-09, third
+  `CategoryType` added following the exact same pattern. New `CategoryTypeTest` proves
+  `DOCUMENT_TYPE.defaultSeed()` codes match `SourceDocumentType` enum constants exactly, same order
+  (the load-bearing correctness claim — a value added here with no matching enum constant would fail
+  at document-creation time, same accepted tradeoff as `PAYMENT_METHOD`). `SourceDocs.vue`'s
+  `typeLabel()` now shows the curated label (e.g. "Sales Invoice") instead of the old raw
+  underscore-replaced enum name ("SALES INVOICE"). No Agent 2 review required — `SourceDocument.type`
+  is a classification tag, not a posting/balance/tax/period calculation (AGENTS.md Agent 2 scope).
+  `mvn clean test`: 95 tests (93 + 2 new), same 2 known pre-existing failures; `npm run build`: clean.
 
 **New — confirmed pre-existing bug, normal priority, not blocking (surfaced while building the
 credit-notes endpoint):** `InvoiceService.kt:574-575` — `findByEntity()`'s `when` branches on
@@ -292,15 +500,15 @@ runs, not caused by this session's work, confirmed present before and after):**
 
 ## Open Risks / Blockers
 
-- **TOP PRIORITY — IN PROGRESS (fix cycle started): codebase-wide IDOR / cross-entity data-isolation
-  gap.** Only 3 of the controllers accepting a client-supplied `entityId` (`OrganizationController`,
-  `ApiKeyController`, `UserController`) verify it against the authenticated user's own entity; the
-  rest — including `JournalController`, `LedgerController`, `TrialBalanceController`,
-  `InvoiceController`, `BillController`, `AssetController`, `CreditNoteController`, and more — do not,
-  meaning an authenticated user could potentially read another entity's financial data by supplying a
-  different `entityId`. Real, severe, pre-existing (not introduced this session), and now the highest
-  priority open item in this file per CLAUDE.md's correctness > security ordering. See Known Issues
-  (top) and Next Recommended Action (top) for status.
+- **RESOLVED — codebase-wide IDOR / cross-entity data-isolation gap, plus SoD role gates.** Fixed
+  `ac16f42`..`3953672` (2026-08-02, but never marked resolved here until 2026-08-09); a live gap the
+  original sweep missed (`GlobalApprovalController`, no ownership check and no role gate at all) and
+  a live, deferred bug it found but didn't fix (`CFO`→`CONTROLLER_CFO` role string in
+  `PaymentController`/`ReceiptController`) were both found and fixed 2026-08-09 during independent
+  re-verification. See Known Issues (top) for full detail. No residual risk known at this time, but
+  given this is the **second** time a peer-comparison pass found something a prior pass missed, a
+  future session should still do one more independent enumeration of every `@RestController` against
+  the ownership-check + role-gate pattern before treating this as permanently closed.
 - Fiscal-year default/context-switch/switcher-UI bugs (BUG-24/27/34) are now fixed and verified (see
   Known Issues) — **removed** from this list. BUG-25 (multiple concurrent `OPEN` periods) is also
   **removed** from this list — verified genuinely enforced, and now locked in by a permanent
@@ -316,13 +524,27 @@ runs, not caused by this session's work, confirmed present before and after):**
 
 ## Outstanding Reviews
 
-- **TOP PRIORITY — IDOR fix cycle starting now.** A dedicated Engineering fix pass across the ~20
-  affected controllers begins immediately following this update, each fix routing through Accounting
-  review wherever the controller touches money/postings/periods per CLAUDE.md §17 (e.g.
-  `JournalController`, `LedgerController`, `TrialBalanceController`, `InvoiceController`,
-  `BillController`, `AssetController`, `CreditNoteController` all qualify). No individual controller
-  fix in this cycle may be marked `COMPLETE` without both Engineering and Accounting sign-off recorded
-  here, same as every other module.
+- **IDOR/RBAC sweep (`ac16f42`..`3953672`) plus the 2026-08-09 fast-follow (CFO role-string fix,
+  `GlobalApprovalController` fix): Engineering-owned and approved, no Accounting gate applies.**
+  Per AGENTS.md's Ownership Matrix, "Security/RBAC, infra, CI/CD, performance" is a row Agent 1
+  "Owns & approves" outright (N/A for Agent 2) — unlike a posting-logic or tax-calculation change,
+  this class of fix only requires Engineering to actually run it (AGENTS.md's "run it, don't just
+  read it" bar), not a separate Accounting sign-off. Verified per that bar, not by reading the diff:
+  full `mvn clean test` re-run after each fix (93 → 95 tests across this session, only the same 2
+  known pre-existing failures both times), and a new real regression test for each specific
+  gap — `GlobalApprovalControllerSecurityTest` (4 tests: cross-entity 403, DATA_ENTRY role-gate 403,
+  SENIOR_ACCOUNTANT happy-path 200) proves the fix, not just documents intent. **APPROVED
+  (Engineering).**
+- **Dynamic category management, all three kinds (`PAYMENT_TERM`/`PAYMENT_METHOD`: `986fd63`..
+  `aa43b7a`; `DOCUMENT_TYPE`: 2026-08-09): Engineering + Accounting sign-off recorded.**
+  `PAYMENT_TERM`/`PAYMENT_METHOD` — Financial Systems Architect **APPROVED** at merge time (seed-data
+  fidelity, `BillService.parsePaymentTermsDays` due-date calculation preserved, migration race-safety
+  via unique constraint, security guard + role gate correct) — this sign-off existed since
+  2026-08-03 but was never transcribed into this file until now. `DOCUMENT_TYPE` — no Accounting
+  gate needed (source-document classification is not a posting/balance/tax/period calculation per
+  AGENTS.md's Agent 2 scope list); Engineering-verified via the new `CategoryTypeTest` (proves the
+  seed codes match `SourceDocumentType` exactly) plus full `mvn clean test` (95 tests, same 2 known
+  failures) and `npm run build` (clean). **APPROVED.**
 - **BUG-25 permanent regression test (`ac7da9c`) and standalone credit-notes endpoint (`8eeee49`):
   both now have recorded Engineering + Accounting sign-off**, per AGENTS.md's Definition of
   Completion. BUG-25: Financial Systems Architect proved the new test is a real regression test (not
@@ -352,31 +574,28 @@ runs, not caused by this session's work, confirmed present before and after):**
 ## Next Recommended Action
 
 Uncommitted-work reconciliation, the BUG-24/25/27/34 period-management fixes, the BUG-25 permanent
-regression test, and the standalone credit-notes endpoint are all done and verified (see above). The
-old ROADMAP.md "Tier 1" list is confirmed already resolved in current code — no action needed there.
-Real remaining Phase 0 work, in priority order:
+regression test, the standalone credit-notes endpoint, the codebase-wide IDOR/RBAC fix cycle (plus
+its 2026-08-09 fast-follow), and all three hardcoded-category violations (`PAYMENT_TERM`/
+`PAYMENT_METHOD`/`DOCUMENT_TYPE`) are all done and verified (see above). The old ROADMAP.md "Tier 1"
+list is confirmed already resolved in current code — no action needed there. Real remaining Phase 0
+work, in priority order:
 
-1. **TOP PRIORITY, fix cycle starting now:** codebase-wide IDOR fix — audit and correct all ~20
-   controllers that accept a client-supplied `entityId` without verifying it against the
-   authenticated user's own entity (`JournalController`, `LedgerController`,
-   `TrialBalanceController`, `InvoiceController`, `BillController`, `AssetController`,
-   `CreditNoteController`, and the rest), bringing them up to the pattern already correctly used by
-   `OrganizationController`, `ApiKeyController`, and `UserController`. This ranks above all remaining
-   Tier 2/3 feature work per CLAUDE.md's correctness > security priority ordering — see Known Issues
-   and Open Risks/Blockers (both top item) and `workplan.md` Phase 0.
-2. Close Tier 2 remaining workflow gap: IFRS 15 over-time revenue recognition period-end recognition
+1. Close Tier 2 remaining workflow gap: IFRS 15 over-time revenue recognition period-end recognition
    job (point-in-time works; the other Tier 2 items — standalone credit-notes endpoint,
    closing-preview, source-document restore — are now resolved, see above).
-3. Close Tier 3 infrastructure gaps: wire the Spring Batch pipeline so depreciation/FX revaluation
+2. Close Tier 3 infrastructure gaps: wire the Spring Batch pipeline so depreciation/FX revaluation
    run asynchronously; seed COA template data for the signup wizard; build the M-Pesa STK-push
    session table (replace sentinel UUIDs).
-4. Normal-priority backlog: fix `InvoiceService.kt:574-575`'s `findByEntity()` filter-priority bug
+3. Normal-priority backlog: fix `InvoiceService.kt:574-575`'s `findByEntity()` filter-priority bug
    (status filter silently dropped when both `customerId` and `status` are supplied — needs a
-   combined-filter repository method); consolidate the three hardcoded-category violations
-   (`PAYMENT_TERMS`, `PAYMENT_METHODS`, `DOC_TYPES` — see Known Issues) into a dynamic-management
-   screen; restore or delete the two fully-commented-out test files (`InvoiceServiceTest.kt`,
-   `ReceiptServiceTest.kt`); investigate/fix the two pre-existing backend test failures
-   (`UserServiceTest`, `CoreAccountingIntegrationTest`).
+   combined-filter repository method); restore or delete the two fully-commented-out test files
+   (`InvoiceServiceTest.kt`, `ReceiptServiceTest.kt`); investigate/fix the two pre-existing backend
+   test failures (`UserServiceTest`, `CoreAccountingIntegrationTest`).
+4. Recommended, not yet scheduled: one more independent enumeration of every `@RestController` in the
+   codebase against the ownership-check + role-gate pattern (see Open Risks/Blockers) — two
+   consecutive independent review passes each found something the previous pass missed
+   (`GlobalApprovalController` was missed by both the original IDOR sweep and its own RBAC
+   fast-follow), so treat "the sweep is complete" as a hypothesis to keep testing, not a settled fact.
 
 ## Lessons Learned
 
@@ -402,3 +621,25 @@ Real remaining Phase 0 work, in priority order:
   severe pre-existing defect shared by ~20 other controllers. This validates why the peer-comparison
   step in AGENTS.md's Agent 2 checklist is mandatory rather than optional, and why "hold existing work
   to the same bar once touched" matters even when the touched code itself looks fine.
+- **Completed engineering work is not "done" until Delivery Manager records it — a full sweep sat
+  unrecorded in this file for a week.** The IDOR/RBAC fix cycle and the `PAYMENT_TERM`/
+  `PAYMENT_METHOD` category work both landed and were verified/approved on 2026-08-02/03, but this
+  file kept describing the IDOR gap as "IN PROGRESS" until 2026-08-09 simply because no session
+  closed the loop. A user asking "what's the state of X" or "proceed with the plan" between those
+  dates would have been given stale, overly-alarming information from this file directly. AGENTS.md
+  already assigns this to the Delivery Manager persona ("keeps `workplan.md`'s current phase and
+  `MEMORY.md`'s current milestone/sprint in sync with actual repo state") — the gap here was a
+  process miss (the persona wasn't adopted at the end of that session), not a gap in the rule itself.
+  Practical takeaway: at the end of any unit of work, explicitly check "did I update MEMORY.md" as
+  its own step, the same way `mvn test`/`npm run build` are checked, rather than assuming the fix
+  commits speak for themselves.
+- **A completed security sweep is a hypothesis, not a settled fact, until something enumerates the
+  full controller list against it.** Two independent review passes (the original IDOR sweep, then
+  its own RBAC fast-follow in `626fc6d`) each individually found a real, severe gap the *other* had
+  missed — and a **third** pass (this session) still found `GlobalApprovalController`, missed by
+  both. The common failure mode: each pass reasoned from "controllers of this kind" (REST
+  controllers exposing `entityId`-scoped resources) rather than mechanically listing every
+  `@RestController` in the codebase and checking each one off. The check that actually worked this
+  session was a blunt, mechanical `grep`/loop over every `*Controller.kt` file counting
+  `@PreAuthorize`/`SecurityUtils` occurrences against its endpoint count — cheap, exhaustive, and
+  more reliable here than reasoning about which controllers "should" already be covered.

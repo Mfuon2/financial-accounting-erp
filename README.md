@@ -441,6 +441,26 @@ Results cache for 5 minutes. Critical failures block most transaction workflows.
 
 ---
 
+### 27. Budgeting (Project.md Domain 1)
+
+- **Budgets**: entity-scoped plans (name, status, notes) made up of **budget lines** — one row per
+  (GL account, accounting period, amount). A budget's total is always derived from its lines, never
+  client-supplied.
+- **Lifecycle**: `DRAFT → APPROVED` or `→ VOID` (from either status). Corrections are void-and-recreate,
+  matching this codebase's immutability-after-approval convention — a budget is never edited once
+  `APPROVED`.
+- **Validation**: every line's account must belong to the same entity, be active, and not be a
+  header/summary account (IAS 1 §29 — the same rule journal posting enforces); every line's period
+  must belong to the same entity.
+- **Budget-vs-actual variance report**: for each line, "actual" is the net ledger movement for that
+  account over that line's period date range, signed per the account's normal balance (the same
+  signed-actual convention the Analytics Dashboard's trial-balance summary uses), so a budgeted
+  amount and its actual are directly comparable regardless of whether the account is debit-normal
+  (assets/expenses) or credit-normal (liabilities/equity/revenue). A budget never posts a journal
+  entry — it is a planning artifact only, compared against the ledger at read time.
+
+---
+
 ## Architecture
 
 ```
@@ -480,6 +500,7 @@ com.qesuite.accounting
 ├── ap                 Period management and 9-step cycle controller
 ├── approvals          Global approvals aggregation queue
 ├── assets             IAS 16 fixed assets, depreciation, disposal
+├── budgeting          Budgets, budget lines, budget-vs-actual variance reporting
 ├── coa                Chart of accounts, hierarchy, templates
 ├── fx                 Currencies, exchange rates, FX revaluation (IAS 21)
 ├── invoicing          Customer invoices, credit notes, AR lifecycle, IFRS 15
@@ -495,6 +516,7 @@ com.qesuite.accounting
 ├── users              Users, auth, sessions, password management, API keys
 └── shared
     ├── audit          Forensic audit log (AOP @Auditable, insert-only)
+    ├── categories     Configurable category values (payment terms/methods, document types)
     ├── codegen        Configurable entity number generation (13 modules)
     ├── compliance     IAS 1 compliance checker
     ├── docs           OpenAPI / Scalar API documentation controller
@@ -515,13 +537,14 @@ src/views
 ├── ledger        Chart of accounts, periods, journal entries, source documents
 ├── parties       Customers, suppliers
 ├── assets        Fixed asset register, depreciation run
+├── planning      Budgets and budget-vs-actual variance reporting
 ├── revenue       Invoices, credit notes, payments, receipts, AR ageing
 ├── payables      Vendor bills, AP ageing
 ├── period-end    Trial balance, period-end workflow, FX revaluation
 ├── statements    Profit & loss, balance sheet, cash flow, close period
 ├── reports       T-account, sub-ledgers, audit trail, IAS 1, comparative TB
-└── setup         Profile, organisation, users, API keys,
-                  tax & currency, security (sessions), system health
+└── setup         Profile, organisation, users, API keys, tax & currency,
+                  categories, security (sessions), system health
 ```
 
 ---
