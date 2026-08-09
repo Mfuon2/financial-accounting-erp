@@ -42,48 +42,55 @@ export const TAX_CODES = [
   { code: "WHT-5",  name: "Withholding 5%",   type: "WHT",    rate: 0.05, account: "2-2110", active: true },
 ]
 
-/* ---------- Chart of Accounts (tree) ---------- */
+/* ---------- Chart of Accounts (tree) ----------
+   `subtype` matches the backend's AccountSubtype enum exactly (coa/domain/AccountEnums.kt) — added
+   alongside the Cash & Bank Management module so accountSubtype-based filters (e.g. "only
+   CASH_AND_EQUIVALENTS accounts are eligible for bank reconciliation", the same filter
+   BankStatementService.validateBankAccount enforces on the backend) behave the same way in demo
+   mode as in production. Header rows are left without one — accounts.js's demoAccounts() only
+   needs a per-class fallback for those, since isHeader already excludes them from every
+   subtype-based picker. */
 export const COA = [
   // Assets (1)
   { code: "1-0000", name: "ASSETS",                            type: "HEADER", class: "ASSET",     parent: null,     normal: "DR", balance: 8412500,   ifrs: "IAS 1" },
   { code: "1-1000", name: "Current Assets",                    type: "HEADER", class: "ASSET",     parent: "1-0000", normal: "DR", balance: 4980320 },
-  { code: "1-1100", name: "Cash & Bank — KES Operating",       type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 2148900,   currency: "KES" },
-  { code: "1-1105", name: "Cash & Bank — USD Settlement",      type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 540220,    currency: "USD" },
-  { code: "1-1110", name: "Petty Cash",                        type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 24500,     currency: "KES" },
-  { code: "1-1200", name: "Accounts Receivable",               type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 1842700,   currency: "KES", sub: true },
-  { code: "1-1300", name: "Prepaid Expenses",                  type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 124000,    currency: "KES" },
-  { code: "1-1400", name: "Inventory",                         type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 300000,    currency: "KES" },
+  { code: "1-1100", name: "Cash & Bank — KES Operating",       type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 2148900,   currency: "KES", subtype: "CASH_AND_EQUIVALENTS" },
+  { code: "1-1105", name: "Cash & Bank — USD Settlement",      type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 540220,    currency: "USD", subtype: "CASH_AND_EQUIVALENTS" },
+  { code: "1-1110", name: "Petty Cash",                        type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 24500,     currency: "KES", subtype: "CASH_AND_EQUIVALENTS" },
+  { code: "1-1200", name: "Accounts Receivable",               type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 1842700,   currency: "KES", sub: true, subtype: "CURRENT_RECEIVABLE" },
+  { code: "1-1300", name: "Prepaid Expenses",                  type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 124000,    currency: "KES", subtype: "CURRENT_PREPAID" },
+  { code: "1-1400", name: "Inventory",                         type: "POST",   class: "ASSET",     parent: "1-1000", normal: "DR", balance: 300000,    currency: "KES", subtype: "CURRENT_INVENTORY" },
   { code: "1-2000", name: "Non-Current Assets",                type: "HEADER", class: "ASSET",     parent: "1-0000", normal: "DR", balance: 3432180 },
-  { code: "1-2100", name: "Property, Plant & Equipment",       type: "POST",   class: "ASSET",     parent: "1-2000", normal: "DR", balance: 3800000,   currency: "KES" },
-  { code: "1-2110", name: "Accumulated Depreciation",          type: "POST",   class: "ASSET",     parent: "1-2000", normal: "CR", balance: -367820,   currency: "KES", contra: true },
+  { code: "1-2100", name: "Property, Plant & Equipment",       type: "POST",   class: "ASSET",     parent: "1-2000", normal: "DR", balance: 3800000,   currency: "KES", subtype: "NON_CURRENT_PPE" },
+  { code: "1-2110", name: "Accumulated Depreciation",          type: "POST",   class: "ASSET",     parent: "1-2000", normal: "CR", balance: -367820,   currency: "KES", contra: true, subtype: "ACCUMULATED_DEPRECIATION" },
 
   // Liabilities (2)
   { code: "2-0000", name: "LIABILITIES",                       type: "HEADER", class: "LIABILITY", parent: null,     normal: "CR", balance: 1984140 },
   { code: "2-1000", name: "Current Liabilities",               type: "HEADER", class: "LIABILITY", parent: "2-0000", normal: "CR", balance: 1658140 },
-  { code: "2-1100", name: "Accounts Payable",                  type: "POST",   class: "LIABILITY", parent: "2-1000", normal: "CR", balance: 824300,    currency: "KES", sub: true },
-  { code: "2-1200", name: "Deferred Revenue (IFRS 15)",        type: "POST",   class: "LIABILITY", parent: "2-1000", normal: "CR", balance: 450000,    currency: "KES" },
-  { code: "2-2100", name: "VAT Payable",                       type: "POST",   class: "LIABILITY", parent: "2-1000", normal: "CR", balance: 312840,    currency: "KES" },
-  { code: "2-2110", name: "Withholding Tax Payable",           type: "POST",   class: "LIABILITY", parent: "2-1000", normal: "CR", balance: 71000,     currency: "KES" },
+  { code: "2-1100", name: "Accounts Payable",                  type: "POST",   class: "LIABILITY", parent: "2-1000", normal: "CR", balance: 824300,    currency: "KES", sub: true, subtype: "CURRENT_PAYABLE" },
+  { code: "2-1200", name: "Deferred Revenue (IFRS 15)",        type: "POST",   class: "LIABILITY", parent: "2-1000", normal: "CR", balance: 450000,    currency: "KES", subtype: "CURRENT_DEFERRED_REVENUE" },
+  { code: "2-2100", name: "VAT Payable",                       type: "POST",   class: "LIABILITY", parent: "2-1000", normal: "CR", balance: 312840,    currency: "KES", subtype: "CURRENT_TAX" },
+  { code: "2-2110", name: "Withholding Tax Payable",           type: "POST",   class: "LIABILITY", parent: "2-1000", normal: "CR", balance: 71000,     currency: "KES", subtype: "CURRENT_TAX" },
   { code: "2-3000", name: "Non-Current Liabilities",           type: "HEADER", class: "LIABILITY", parent: "2-0000", normal: "CR", balance: 326000 },
-  { code: "2-3100", name: "Long-Term Loan",                    type: "POST",   class: "LIABILITY", parent: "2-3000", normal: "CR", balance: 326000,    currency: "KES" },
+  { code: "2-3100", name: "Long-Term Loan",                    type: "POST",   class: "LIABILITY", parent: "2-3000", normal: "CR", balance: 326000,    currency: "KES", subtype: "NON_CURRENT_LONG_TERM_DEBT" },
 
   // Equity (3)
   { code: "3-0000", name: "EQUITY",                            type: "HEADER", class: "EQUITY",    parent: null,     normal: "CR", balance: 6428360 },
-  { code: "3-1000", name: "Share Capital",                     type: "POST",   class: "EQUITY",    parent: "3-0000", normal: "CR", balance: 5000000,   currency: "KES" },
-  { code: "3-2000", name: "Retained Earnings",                 type: "POST",   class: "EQUITY",    parent: "3-0000", normal: "CR", balance: 1428360,   currency: "KES" },
+  { code: "3-1000", name: "Share Capital",                     type: "POST",   class: "EQUITY",    parent: "3-0000", normal: "CR", balance: 5000000,   currency: "KES", subtype: "SHARE_CAPITAL" },
+  { code: "3-2000", name: "Retained Earnings",                 type: "POST",   class: "EQUITY",    parent: "3-0000", normal: "CR", balance: 1428360,   currency: "KES", subtype: "RETAINED_EARNINGS" },
 
   // Revenue (4)
   { code: "4-0000", name: "REVENUE",                           type: "HEADER", class: "REVENUE",   parent: null,     normal: "CR", balance: 2184700 },
-  { code: "4-1000", name: "Service Revenue",                   type: "POST",   class: "REVENUE",   parent: "4-0000", normal: "CR", balance: 1944700,   currency: "KES" },
-  { code: "4-2000", name: "Subscription Revenue (OVER_TIME)",  type: "POST",   class: "REVENUE",   parent: "4-0000", normal: "CR", balance: 240000,    currency: "KES" },
+  { code: "4-1000", name: "Service Revenue",                   type: "POST",   class: "REVENUE",   parent: "4-0000", normal: "CR", balance: 1944700,   currency: "KES", subtype: "OPERATING_REVENUE" },
+  { code: "4-2000", name: "Subscription Revenue (OVER_TIME)",  type: "POST",   class: "REVENUE",   parent: "4-0000", normal: "CR", balance: 240000,    currency: "KES", subtype: "OPERATING_REVENUE" },
 
   // Expense (5)
   { code: "5-0000", name: "EXPENSES",                          type: "HEADER", class: "EXPENSE",   parent: null,     normal: "DR", balance: 1298120 },
-  { code: "5-1000", name: "Cost of Sales",                     type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 320400,    currency: "KES" },
-  { code: "5-2000", name: "Salaries & Wages",                  type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 624000,    currency: "KES" },
-  { code: "5-3000", name: "Operating Expenses",                type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 198400,    currency: "KES" },
-  { code: "5-3100", name: "Depreciation Expense",              type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 124400,    currency: "KES" },
-  { code: "5-9000", name: "Gain/Loss on Disposal",             type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 30920,     currency: "KES" },
+  { code: "5-1000", name: "Cost of Sales",                     type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 320400,    currency: "KES", subtype: "COGS" },
+  { code: "5-2000", name: "Salaries & Wages",                  type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 624000,    currency: "KES", subtype: "OPERATING_EXPENSES" },
+  { code: "5-3000", name: "Operating Expenses",                type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 198400,    currency: "KES", subtype: "OPERATING_EXPENSES" },
+  { code: "5-3100", name: "Depreciation Expense",              type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 124400,    currency: "KES", subtype: "DEPRECIATION" },
+  { code: "5-9000", name: "Gain/Loss on Disposal",             type: "POST",   class: "EXPENSE",   parent: "5-0000", normal: "DR", balance: 30920,     currency: "KES", subtype: "OPERATING_EXPENSES" },
 ]
 
 /* ---------- Periods (FY 2026) ---------- */
@@ -513,6 +520,61 @@ export const BUDGETS = [
   },
 ]
 
+/* ---------- Bank statement imports / reconciliation (demo) ----------
+   Numbers are hand-derived to genuinely satisfy the reconciliation identity used by
+   BankStatementService.reconciliationSummary on the backend:
+     adjustedBookBalance  = glBalance + bankOutstandingTotal
+     adjustedBankBalance  = closingBalance + glOutstandingTotal
+   BSTMT-001 is a clean tie-out (glBalance/closingBalance are derived from the same
+   opening-balance + matched + outstanding arithmetic, so both sides land on 2,643,500 before the
+   demo user does any matching, and still land on 2,618,500 after auto-matching L5↔GLE-D3 — the
+   total doesn't change, matching only re-buckets it). BSTMT-002 deliberately does NOT tie out —
+   glBalance is a fixed, independently-given number (like the real `sumFunctionalDebits/Credits`
+   query result, not derived from these lines) representing a small pre-existing, unexplained
+   variance — demonstrating that this module surfaces a genuine gap rather than hiding or
+   auto-adjusting it (see BankStatementService's module-level KDoc for why no adjustment is
+   posted automatically in this first cut). */
+export const BANK_STATEMENTS = [
+  {
+    id: "BSTMT-2026-02-1100",
+    accountCode: "1-1100",
+    statementDate: "2026-02-28",
+    openingBalance: 2450000,
+    closingBalance: 2618500,
+    glBalance: 2618000,
+    notes: "Equity Bank KES Operating Account — February 2026 statement",
+    lines: [
+      { id: "BSL-1", transDate: "2026-02-10", description: "MPESA - CUSTOMER PAYMENT INV-2026-0017", amount: 185000, reference: "FT2602103A", status: "MATCHED", matchedLedgerEntryId: "GLE-D1", matchType: "MANUAL" },
+      { id: "BSL-2", transDate: "2026-02-14", description: "EFT - EQUITY OFFICE SUPPLIES LTD",        amount: -42000, reference: "EFT-88213",  status: "MATCHED", matchedLedgerEntryId: "GLE-D2", matchType: "MANUAL" },
+      { id: "BSL-3", transDate: "2026-02-27", description: "BANK CHARGES - LEDGER FEE",                amount: -350,   reference: null,          status: "UNMATCHED" },
+      { id: "BSL-4", transDate: "2026-02-28", description: "INTEREST EARNED - FEBRUARY",                amount: 850,    reference: null,          status: "IGNORED", ignoreReason: "Immaterial — will be journalled in the March close" },
+      { id: "BSL-5", transDate: "2026-02-20", description: "MPESA TRANSFER - CLIENT DEPOSIT",           amount: 25000,  reference: "FT2602201B",  status: "UNMATCHED" },
+    ],
+    // Candidate GL entries for matching against this account — GLE-D1/D2 are already matched
+    // (referenced above); GLE-D3 is deliberately left unmatched, dated within 3 days of BSL-5 and
+    // for the same amount, so the demo's "Auto-match" action has a real (single) candidate to find.
+    ledgerEntries: [
+      { id: "GLE-D1", transDate: "2026-02-10", debit: 185000, credit: 0 },
+      { id: "GLE-D2", transDate: "2026-02-14", debit: 0, credit: 42000 },
+      { id: "GLE-D3", transDate: "2026-02-19", debit: 25000, credit: 0 },
+    ],
+  },
+  {
+    id: "BSTMT-2026-02-1105",
+    accountCode: "1-1105",
+    statementDate: "2026-02-28",
+    openingBalance: 543460,
+    closingBalance: 546740,
+    glBalance: 542000,
+    notes: "Equity Bank USD Settlement Account — February 2026 statement",
+    lines: [
+      { id: "BSL-6", transDate: "2026-02-18", description: "WIRE TRANSFER FEE",                amount: -220, reference: null, status: "UNMATCHED" },
+      { id: "BSL-7", transDate: "2026-02-24", description: "FX SETTLEMENT - CLIENT INVOICE",    amount: 3500, reference: null, status: "UNMATCHED" },
+    ],
+    ledgerEntries: [],
+  },
+]
+
 /* ---------- Sparkline data + dashboard time series ---------- */
 export const SPARK_CASH = [1.51, 1.62, 1.55, 1.74, 1.92, 2.10, 2.18, 2.34, 2.42, 2.55, 2.61, 2.71]
 export const SPARK_AR   = [1.20, 1.32, 1.40, 1.38, 1.52, 1.61, 1.55, 1.68, 1.74, 1.80, 1.79, 1.84]
@@ -525,7 +587,7 @@ const QSDATA = {
   PAYMENTS, RECEIPTS, AR_AGEING, USERS, API_KEYS, SESSIONS, AUDIT, APPROVALS,
   TRIAL_BALANCE, IAS1_CHECKS, PnL, BS, CASHFLOW,
   SPARK_CASH, SPARK_AR, SPARK_REV, SPARK_EXP,
-  BILLS, AP_AGEING,
+  BILLS, AP_AGEING, BUDGETS, BANK_STATEMENTS,
 }
 
 export default QSDATA
