@@ -1,6 +1,7 @@
 export { accounts }    from './accounts.js'
 export { approvals }   from './approvals.js'
 export { bills }       from './bills.js'
+export { budgets }     from './budgets.js'
 export { assets }      from './assets.js'
 export { audit }       from './audit.js'
 export { auth }        from './auth.js'
