@@ -23,6 +23,18 @@ const DEFAULT_SEED = {
     { code: 'CHEQUE', label: 'Cheque' },
     { code: 'CREDIT_CARD', label: 'Credit Card' },
   ],
+  DOCUMENT_TYPE: [
+    { code: 'SALES_INVOICE', label: 'Sales Invoice' },
+    { code: 'PURCHASE_INVOICE', label: 'Purchase Invoice' },
+    { code: 'CASH_RECEIPT', label: 'Cash Receipt' },
+    { code: 'PAYMENT_VOUCHER', label: 'Payment Voucher' },
+    { code: 'BANK_STATEMENT', label: 'Bank Statement' },
+    { code: 'CREDIT_NOTE', label: 'Credit Note' },
+    { code: 'DEBIT_NOTE', label: 'Debit Note' },
+    { code: 'PAYROLL_RECORD', label: 'Payroll Record' },
+    { code: 'TAX_DECLARATION', label: 'Tax Declaration' },
+    { code: 'JOURNAL_VOUCHER', label: 'Journal Voucher' },
+  ],
 }
 
 function demoList(type) {

@@ -18,6 +18,7 @@ const canManage = computed(() => ['SYSTEM_ADMIN', 'CONTROLLER_CFO'].includes(cur
 const TABS = [
   { id: 'PAYMENT_TERM', label: 'Payment Terms' },
   { id: 'PAYMENT_METHOD', label: 'Payment Methods' },
+  { id: 'DOCUMENT_TYPE', label: 'Document Types' },
 ]
 
 const tab = ref('PAYMENT_TERM')
@@ -145,7 +146,7 @@ async function activate(c) {
   <div class="page">
     <PageHeader
       title="Categories"
-      meta="Payment terms · payment methods — entity-managed values used across Customers, Suppliers, Bills, Payments and Invoices"
+      meta="Payment terms · payment methods · document types — entity-managed values used across Customers, Suppliers, Bills, Payments, Invoices and Source Documents"
       :tabs="tabs"
       :activeTab="tab"
       @tab="tab = $event"

@@ -5,6 +5,7 @@ import { sourceDocs as sourceDocsApi, periods as periodsApi } from '@/api/index.
 import { isDemo } from '@/composables/useAppMode.js'
 import { useAuth } from '@/composables/useAuth.js'
 import { useToast } from '@/composables/useToast.js'
+import { useCategoryCache } from '@/composables/useCategoryCache.js'
 import { fmt, fmtDate } from '@/utils/format.js'
 import PageHeader   from '@/components/PageHeader.vue'
 import Button       from '@/components/primitives/Button.vue'
@@ -23,11 +24,10 @@ const { currentUser } = useAuth()
 const entityId = computed(() => currentUser.value?.entityId ?? 'current')
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const DOC_TYPES = [
-  'SALES_INVOICE','PURCHASE_INVOICE','CASH_RECEIPT','PAYMENT_VOUCHER',
-  'BANK_STATEMENT','CREDIT_NOTE','DEBIT_NOTE','PAYROLL_RECORD',
-  'TAX_DECLARATION','JOURNAL_VOUCHER',
-]
+// Document types are entity-managed dynamic data (CLAUDE.md §2) — see shared/categories on the
+// backend and setup/Categories.vue for where they're created/edited. Cached at module level.
+const docTypesCache = useCategoryCache('DOCUMENT_TYPE')
+const DOC_TYPES = computed(() => docTypesCache.list.value.map(c => c.code))
 const STATUSES  = ['ALL','DRAFT','SUBMITTED','REVIEWED','APPROVED','ARCHIVED','VOID']
 const WORKFLOW  = ['DRAFT','SUBMITTED','REVIEWED','APPROVED','ARCHIVED']
 
@@ -58,6 +58,7 @@ function norm(d) {
 // ── Load ──────────────────────────────────────────────────────────────────────
 async function load() {
   loading.value = true
+  docTypesCache.load(entityId.value)
   if (isDemo.value) {
     docList.value = SOURCE_DOCS.map(norm)
     loading.value = false
@@ -312,7 +313,9 @@ const openPeriods = computed(() =>
   allPeriods.value.filter(p => p.status === 'OPEN' || p.status === 'ADJUSTING')
 )
 
-function typeLabel(t) { return (t || '').replace(/_/g, ' ') }
+function typeLabel(t) {
+  return docTypesCache.list.value.find(c => c.code === t)?.label ?? (t || '').replace(/_/g, ' ')
+}
 </script>
 
 <template>
