@@ -50,6 +50,7 @@ const NAV_ROUTES = [
   { id: "assets",       label: "Fixed Assets",      icon: "asset",      route: "/assets",       group: "Assets" },
   { id: "depreciation", label: "Depreciation Run",  icon: "trend-down", route: "/depreciation", group: "Assets" },
   { id: "budgets",      label: "Budgets",           icon: "chart",      route: "/budgets",      group: "Budgeting" },
+  { id: "bank-reconciliation", label: "Reconciliation", icon: "bank",  route: "/bank-reconciliation", group: "Banking" },
   { id: "expense-claims", label: "Expense Claims",  icon: "receipt",    route: "/expense-claims", group: "Expenses" },
   { id: "bills",        label: "Vendor Bills",      icon: "doc",        route: "/bills",         group: "Payables" },
   { id: "ap-ageing",   label: "AP Ageing",         icon: "clock",      route: "/ap-ageing",    group: "Payables" },
@@ -79,7 +80,7 @@ const NAV_ROUTES = [
   { id: "security",     label: "Security",          icon: "shield",     route: "/security",     group: "Setup" },
 ]
 
-const GROUP_ORDER = ["Overview","Ledger","Parties","Assets","Budgeting","Expenses","Payables","Revenue","Period-End","Statements","Reports","Setup"]
+const GROUP_ORDER = ["Overview","Ledger","Parties","Assets","Budgeting","Banking","Expenses","Payables","Revenue","Period-End","Statements","Reports","Setup"]
 
 const groups = computed(() => {
   return GROUP_ORDER.map(name => ({
