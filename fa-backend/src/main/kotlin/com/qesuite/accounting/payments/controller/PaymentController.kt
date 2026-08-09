@@ -14,6 +14,7 @@ import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
 import com.qesuite.accounting.shared.exceptions.ValidationException
 import com.qesuite.accounting.shared.idempotency.service.IdempotencyResult
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import com.qesuite.accounting.shared.idempotency.service.IdempotencyService
 import io.swagger.v3.oas.annotations.Operation
@@ -68,7 +69,7 @@ class PaymentController(
 
     @Operation(summary = "Create a new payment (PENDING status)")
     @PostMapping
-    @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun createPayment(
         @Valid @RequestBody command: CreatePaymentCommand,
         @RequestHeader(value = "Idempotency-Key", required = true)
@@ -100,7 +101,7 @@ class PaymentController(
 
     @Operation(summary = "List payments for an entity with optional filters (paginated)")
     @GetMapping
-    @PreAuthorize("hasAnyRole('DATA_ENTRY','ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','AUDITOR','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun listPayments(
         @RequestParam entityId: UUID,
         @RequestParam(required = false) status: PaymentStatus?,
@@ -118,7 +119,7 @@ class PaymentController(
 
     @Operation(summary = "Get payment by ID")
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('DATA_ENTRY','ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','AUDITOR','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun getById(@PathVariable id: UUID): ResponseEntity<ApiResponse<PaymentResponse>> {
         val payment = paymentService.findById(id)
         SecurityUtils.requireOwnEntity(payment.entityId)
@@ -131,7 +132,7 @@ class PaymentController(
 
     @Operation(summary = "Match a PENDING payment to an invoice")
     @PostMapping("/{id}/match")
-    @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun matchToInvoice(
         @PathVariable id: UUID,
         @Valid @RequestBody request: PaymentMatchRequest
@@ -147,7 +148,7 @@ class PaymentController(
 
     @Operation(summary = "Approve a MATCHED payment")
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.APPROVER)
     fun approvePayment(@PathVariable id: UUID): ResponseEntity<ApiResponse<PaymentResponse>> {
         SecurityUtils.requireOwnEntity(paymentService.findById(id).entityId)
         val payment = paymentService.approvePayment(id)
@@ -160,7 +161,7 @@ class PaymentController(
 
     @Operation(summary = "Post an APPROVED payment to the general ledger")
     @PostMapping("/{id}/post")
-    @PreAuthorize("hasAnyRole('SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.APPROVER)
     fun postPayment(@PathVariable id: UUID): ResponseEntity<ApiResponse<PaymentResponse>> {
         SecurityUtils.requireOwnEntity(paymentService.findById(id).entityId)
         val payment = paymentService.postPayment(id)
@@ -173,7 +174,7 @@ class PaymentController(
 
     @Operation(summary = "Reverse a POSTED payment (creates reversing journal entry)")
     @PostMapping("/{id}/reverse")
-    @PreAuthorize("hasAnyRole('SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.APPROVER)
     fun reversePayment(
         @PathVariable id: UUID,
         @Valid @RequestBody request: ReversePaymentRequest

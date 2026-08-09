@@ -5,6 +5,7 @@ import com.qesuite.accounting.receipts.service.ReceiptService
 import com.qesuite.accounting.shared.dto.PagedResponse
 import com.qesuite.accounting.shared.dto.toPagedResponse
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -53,7 +54,7 @@ class ReceiptController(
             "Returns HTTP 201 with the persisted receipt in POSTED status."
     )
     @PostMapping("/generate")
-    @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun generateReceipt(
         @Valid @RequestBody request: GenerateReceiptRequest
     ): ResponseEntity<ApiResponse<Receipt>> {
@@ -75,7 +76,7 @@ class ReceiptController(
 
     @Operation(summary = "List all receipts for an entity (paginated)")
     @GetMapping
-    @PreAuthorize("hasAnyRole('DATA_ENTRY','ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','AUDITOR','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun findByEntity(
         @RequestParam
         @Parameter(description = "Entity (tenant) ID", required = true)
@@ -93,7 +94,7 @@ class ReceiptController(
 
     @Operation(summary = "Get a receipt by its ID")
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('DATA_ENTRY','ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','AUDITOR','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun findById(
         @PathVariable id: UUID,
     ): ResponseEntity<ApiResponse<Receipt>> {
@@ -112,7 +113,7 @@ class ReceiptController(
             "Returns HTTP 201."
     )
     @PostMapping("/{id}/issue")
-    @PreAuthorize("hasAnyRole('ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.ACCOUNTING_OP)
     fun issueReceipt(
         @PathVariable id: UUID,
     ): ResponseEntity<ApiResponse<Receipt>> {
@@ -131,7 +132,7 @@ class ReceiptController(
             "A non-blank reason must be supplied."
     )
     @PostMapping("/{id}/void")
-    @PreAuthorize("hasAnyRole('SENIOR_ACCOUNTANT','CFO','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.APPROVER)
     fun voidReceipt(
         @PathVariable id: UUID,
         @Valid @RequestBody request: VoidReceiptRequest,
@@ -149,7 +150,7 @@ class ReceiptController(
         description = "Each payment has at most one receipt (enforced by UNIQUE DB constraint)."
     )
     @GetMapping("/by-payment/{paymentId}")
-    @PreAuthorize("hasAnyRole('DATA_ENTRY','ACCOUNTANT','SENIOR_ACCOUNTANT','CFO','AUDITOR','SYSTEM_ADMIN')")
+    @PreAuthorize(RoleSets.BROAD_READ)
     fun findByPayment(
         @PathVariable paymentId: UUID,
     ): ResponseEntity<ApiResponse<Receipt>> {
