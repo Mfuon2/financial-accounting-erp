@@ -4,11 +4,13 @@ import com.qesuite.accounting.approvals.dto.ApprovalActionCommand
 import com.qesuite.accounting.approvals.dto.PendingApprovalItem
 import com.qesuite.accounting.approvals.service.GlobalApprovalService
 import com.qesuite.accounting.shared.exceptions.ApiResponse
+import com.qesuite.accounting.shared.security.RoleSets
 import com.qesuite.accounting.shared.security.SecurityUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -44,6 +46,7 @@ class GlobalApprovalController(
     }
 
     @PostMapping("/{id}/approve")
+    @PreAuthorize(RoleSets.APPROVER)
     @Operation(
         summary = "Approve an item",
         description = "Routes to JournalService.postEntry (JOURNAL_ENTRY) or InvoiceService.approve (INVOICE)."
@@ -52,11 +55,13 @@ class GlobalApprovalController(
         @PathVariable @Parameter(description = "Item UUID") id: UUID,
         @Valid @RequestBody command: ApprovalActionCommand
     ): ApiResponse<String> {
+        SecurityUtils.requireOwnEntity(approvalService.resolveEntityId(id, command.type))
         approvalService.approve(id, command.type)
         return ApiResponse.success("Approved")
     }
 
     @PostMapping("/{id}/reject")
+    @PreAuthorize(RoleSets.APPROVER)
     @Operation(
         summary = "Reject an item",
         description = "Returns journal entry to DRAFT with reason appended. Voids invoice with reason."
@@ -65,6 +70,7 @@ class GlobalApprovalController(
         @PathVariable @Parameter(description = "Item UUID") id: UUID,
         @Valid @RequestBody command: ApprovalActionCommand
     ): ApiResponse<String> {
+        SecurityUtils.requireOwnEntity(approvalService.resolveEntityId(id, command.type))
         approvalService.reject(id, command.type, command.reason)
         return ApiResponse.success("Rejected")
     }

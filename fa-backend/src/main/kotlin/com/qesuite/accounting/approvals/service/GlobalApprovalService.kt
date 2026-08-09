@@ -10,6 +10,7 @@ import com.qesuite.accounting.journal.service.JournalService
 import com.qesuite.accounting.payables.domain.BillStatus
 import com.qesuite.accounting.payables.repository.BillRepository
 import com.qesuite.accounting.payables.service.BillService
+import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.users.repository.UserRepository
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -94,6 +95,24 @@ class GlobalApprovalService(
         }
 
         return (journalItems + invoiceItems + billItems).sortedByDescending { it.submittedAt }
+    }
+
+    /**
+     * Resolves the owning entityId for a pending item BEFORE any approve/reject action is
+     * dispatched — [journalService.postEntry]/[invoiceService.approve]/[billService.approveBill]
+     * and their reject/void counterparts perform no entity-ownership check of their own (that
+     * check normally lives in the entity-specific controller, e.g. JournalController, which this
+     * global queue bypasses), so the controller must verify ownership here first.
+     */
+    @Transactional(readOnly = true)
+    fun resolveEntityId(id: UUID, type: String): UUID = when (type.uppercase()) {
+        "JOURNAL_ENTRY" -> journalRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("JOURNAL_ENTRY_NOT_FOUND", id, "JournalEntry") }.entityId
+        "INVOICE" -> invoiceRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("INVOICE_NOT_FOUND", id, "Invoice") }.entityId
+        "BILL" -> billRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("BILL_NOT_FOUND", id, "Bill") }.entityId
+        else -> throw IllegalArgumentException("Unknown approval type: $type")
     }
 
     @Transactional
