@@ -14,6 +14,7 @@ function demoAccounts() {
     ifrsCategory: a.ifrs ?? 'OPERATING_EXPENSES',
     parentAccountId: a.parent ?? null,
     isActive: true,
+    isHeader: a.type === 'HEADER',
     isTemporary: a.class === 'REVENUE' || a.class === 'EXPENSE',
   }))
 }
