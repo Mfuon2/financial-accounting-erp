@@ -180,6 +180,121 @@ Both blockers below (as originally written) are now resolved:
 
 ---
 
+## Handover — Phase 1 Continued: Cash & Bank Management, Expense Management, Maker-Checker
+
+**Status as of 2026-08-09, same day as the Budgeting handover above.** Two more Phase 1 modules were
+built in parallel by two independently-spawned "senior software architect" agents, each in an
+isolated git worktree, following the Budgeting module's exact conventions (briefed explicitly on all
+of them: header+lines JPA shape, `RoleSets`/`SecurityUtils.requireOwnEntity`, money discipline,
+mutation-tested tests, the live-browser-verification technique). Mid-flight, both were also briefed
+on the `LazyInitializationException` finding (see above) before finishing their own entities.
+
+### Expense Management (T&E) — Phase 1 item 3 — DONE, merged, pushed
+
+`com.qesuite.accounting.expenses.*` — `ExpenseClaim`/`ExpenseClaimLine`, lifecycle
+`DRAFT→SUBMITTED→APPROVED→REIMBURSED` (or `→REJECTED→DRAFT` reopen), posts a real journal entry on
+approval (DR each line's expense account / CR an Employee Reimbursements Payable account reusing
+`AccountSubtype.CURRENT_PAYABLE` — IAS 1 §54(k), defensible, independently confirmed). Merged to
+`main` at `139a10a`. **163/163 backend tests pass** (only the 2 known pre-existing failures),
+`npm run build` clean.
+
+Independently reviewed — **APPROVED WITH CONDITIONS**, every claim verified by actually running
+things (not read-through): the debit=credit posting test, the self-approval guard, and IDOR checks
+were each mutation-tested (temporarily broke the logic, confirmed the specific test caught it,
+reverted, confirmed clean). The one condition: `employeeId` (who the claim is for) was fully
+client-suppliable at creation with no check against the actual submitter — any `PREPARER`-tier user
+could file a claim under a colleague's name, and only the *approval* step checked identity
+(`claim.employeeId == approverId`), not creation. **User's explicit decision: keep delegated
+submission allowed (a legitimate workflow — an assistant filing for an executive), but require true
+maker-checker regardless of whose name is on the claim.** Implemented by adding
+`SecurityUtils.requireNotSelfApproval(claim.createdBy)` alongside the existing `employeeId` check —
+two independent guards, not one replacing the other. New test proves they're independent (a claim
+filed by user A under a different employeeId, approved by user A, is caught by the `createdBy` check
+specifically — the `employeeId` check alone would have missed it). Mutation-tested; merged as
+`139a10a` (after first merging latest `main` into the worktree branch to pick up the
+`SecurityUtils.requireNotSelfApproval` helper this fix depends on).
+
+**Real gap Expense Management's own build surfaced, not yet acted on** (from its build report,
+independently confirmed by the reviewer): a `PREPARER`-tier user can still name *any* employee as
+`employeeId` at creation — the fix above closes the maker-checker gap but does not restrict
+delegation to an authorized/audited list. Not blocking (delegation is intentionally allowed per the
+decision above), but worth a future call on whether delegation should be role-gated or logged more
+visibly than the existing audit trail already does.
+
+### Codebase-wide maker-checker (segregation of duties) — DONE, merged, pushed
+
+The Expense Management delegation question above led directly to a much bigger finding: **every
+approval flow in this codebase — Journal, Invoice, Bill, and the Budgeting module built earlier
+today — checked only ROLE (`RoleSets.APPROVER`), never IDENTITY.** A `SENIOR_ACCOUNTANT` could
+approve their own journal entry, invoice, bill, or budget; role-gating alone never prevented it. This
+is a systemic, real internal-control gap across the entire application, found by the user directly
+("I haven't seen the implementation of maker checkers"), not by an agent.
+
+Fixed with one shared helper, `SecurityUtils.requireNotSelfApproval(createdBy)` (mirrors
+`requireOwnEntity`'s pattern from the original IDOR sweep — one reusable check, not a hand-rolled
+comparison duplicated per service), wired into `JournalService.postEntry`, `InvoiceService.approve`,
+`BillService.approveBill`, and `BudgetService.approve`. `GlobalApprovalController`/`-Service`, which
+routes to all three of the first group directly, inherits the check automatically — no duplicate
+logic needed there. Fails open when `createdBy` is `null` (unknown maker) — every real persisted
+entity has it populated by JPA auditing in production, so this only matters for synthetic/legacy
+data, where blocking outright would be a worse failure mode than allowing it.
+
+9 new tests (`SecurityUtilsTest` ×3 for the helper itself, `BudgetServiceTest`/`JournalServiceTest`
+×2 each, new `BillServiceApprovalTest` ×2 — Bill has no prior test coverage of `approveBill`'s full
+happy path at all, a separate pre-existing gap not solved here, so its second test proves the guard
+lets a different approver *reach* the next step, not that the whole method succeeds end to end).
+Proven load-bearing by mutation testing (Budget's check specifically: disabled it, confirmed the test
+failed by hitting an unmocked repository call instead of the expected exception, reverted, confirmed
+clean). `mvn clean test`: 127 tests at the time of this commit, same 2 known pre-existing failures.
+Merged at `8976e5a`, pushed.
+
+### Cash & Bank Management — Phase 1 item 2 — IN INDEPENDENT REVIEW, NOT YET MERGED
+
+`com.qesuite.accounting.banking.*` — bank statement import, GL matching (manual + a simple
+date/amount-tolerance auto-match), reconciliation tie-out report (`adjustedBookBalance =
+adjustedBankBalance`, the standard two-sided bank-rec identity). Never posts a journal entry — a
+comparison/reporting tool over existing ledger activity, same non-posting design as Budgeting.
+Built and merged with latest `main` in its own isolated worktree (commits `677a838`/`0932d53`);
+**155/155 backend tests pass** (only the 2 known pre-existing failures), `npm run build` clean.
+
+Found and fixed two of its own real bugs during the build: (1) a `LazyInitializationException`-class
+risk it would have inherited from copying `BudgetLine`/`InvoiceLine`'s original shape (fixed before
+finishing, once flagged); (2) a *different* instance of the same underlying problem — this app runs
+`spring.jpa.open-in-view: false`, so a lazy field read after the read-only transaction closes throws
+the same way — fixed with a `JOIN FETCH` repository query. Also found a demo-mode-only gap (the COA
+fixture had no `accountSubtype` field at all, so no demo account could ever match a
+`CASH_AND_EQUIVALENTS` filter — same *class* of gap as the `isHeader` fix in the Budgeting handover
+above, found independently by a different agent). Live-verified in a real browser, catching and
+fixing a KPI-grid overflow bug along the way.
+
+**Independent Financial Systems Architect review was launched and hit a transient API disconnect
+mid-run — not a rejection.** Before disconnecting, it had already independently verified the
+reconciliation identity algebraically (`glBalance = matched + unmatchedGL`,
+`closingBalance = matched + unmatchedBank` ⟹ `adjustedBookBalance = adjustedBankBalance`, both equal
+`matched + unmatchedGL + unmatchedBank` — confirmed sound, not just plausible-looking). Resumed to
+complete the remaining checks (LazyInitializationException fixes, IDOR mutation test, account-picker
+validation, money discipline, and its own judgment on whether this module needs Agent-2-level review
+at all given it never posts a journal entry). **Check for the completed verdict before merging this
+module** — do not treat the partial pre-disconnect finding as a full approval.
+
+### What a future agent should do once the Cash & Bank review lands
+
+1. Read the review's full verdict. If APPROVED (with or without conditions that are then satisfied),
+   merge `worktree-agent-a31b4f89eb4373724` into `main` (same pattern as Expense Management: run
+   `mvn clean test` + `npm run build` in the worktree first, merge, re-verify on `main`, push).
+2. Update this file's Current Sprint/Milestone and `workplan.md`'s Phase 1 entry for Cash & Bank
+   Management from "IN REVIEW" to "DONE" once merged.
+3. Update `README.md`'s module inventory for all three new modules (Budgeting, Expense Management,
+   Cash & Bank Management) — still not done for any of them (CLAUDE.md §12 requirement, tracked as
+   open since the Budgeting handover).
+4. Remaining real Phase 1 items, still fully unbuilt: historical period-balance snapshots, external
+   FX rate feed integration, communication/document-delivery gaps.
+5. Clean up the two isolated worktrees (`.claude/worktrees/agent-a31b4f89eb4373724`,
+   `.claude/worktrees/agent-aad07028cec60e4cc`) once merged — they're gitignored now (see `.gitignore`
+   fix) but still take up disk space until removed (`git worktree remove <path>`).
+
+---
+
 ## Product Baseline — What's Already Built
 
 QeSuite FA is a Kotlin/Spring Boot 3.3 + Vue 3 IFRS financial accounting system. Full detail in

@@ -119,10 +119,30 @@ baseline with no unverified "unverified" critical bugs remaining.
   was pre-existing and app-wide, not Budgeting-specific — also fixed `ChartOfAccounts.vue`'s "Header"
   badge as a result). Remaining, non-blocking: OpenAPI docs not manually eyeballed (see MEMORY.md
   Handover, item 1).
-- **Cash & Bank Management:** bank statement import, transaction matching against ledger entries,
-  reconciliation status tracking (currently only a "Bank Statement" source-document type exists,
-  with no reconciliation engine).
-- **Expense Management (T&E):** employee expense claims, approval routing, reimbursement posting.
+- [IN REVIEW, NOT YET MERGED] **Cash & Bank Management:** bank statement import, GL matching
+  (manual + date/amount-tolerance auto-match), reconciliation tie-out report. Built 2026-08-09 in
+  an isolated worktree (`677a838`/`0932d53`) — `com.qesuite.accounting.banking.*` (backend),
+  `fa-frontend/src/views/banking/BankReconciliation.vue` (frontend). Merged with latest `main`;
+  155/155 backend tests pass (only 2 known pre-existing failures), `npm run build` clean, IDOR and
+  reconciliation-math checks self-proven load-bearing by mutation testing. Found and fixed two of
+  its own real bugs along the way: a `LazyInitializationException`-class risk (same family as
+  `BudgetLine`/`InvoiceLine`) and a second, different instance of the same underlying problem — a
+  lazy field read after this app's `open-in-view: false` transaction had already closed — plus a
+  demo-mode COA-fixture gap (missing `accountSubtype`) blocking the `CASH_AND_EQUIVALENTS` account
+  filter. Live-verified in a browser, catching and fixing a KPI-grid overflow bug.
+  **Independent Financial Systems Architect review in progress — not yet merged into `main`,
+  not yet pushed.** See MEMORY.md for the review verdict once it lands.
+- [DONE] **Expense Management (T&E):** employee expense claims, approval routing, reimbursement
+  posting to the GL. Built 2026-08-09 in an isolated worktree, merged and pushed to `origin/main`
+  (`139a10a`) — `com.qesuite.accounting.expenses.*` (backend),
+  `fa-frontend/src/views/expenses/ExpenseClaims.vue` (frontend). 163/163 backend tests pass (only
+  2 known pre-existing failures), `npm run build` clean. Independently reviewed —
+  **APPROVED WITH CONDITIONS**, condition being an explicit product decision on whether delegated
+  claim submission (filing under a colleague's name) should be allowed; **user decided: yes, keep
+  it allowed, but require true maker-checker (see the codebase-wide segregation-of-duties rollout
+  below) regardless of whose name is on the claim** — implemented and merged. The
+  non-negotiable debit=credit posting test, the (now two-layer) self-approval guard, and the IDOR
+  checks were all independently proven load-bearing by mutation testing, not read-through.
 - **Historical period-balance snapshots:** for fast multi-year comparative statements (currently
   recomputed live from ledger entries every time).
 - **External FX rate feed integration:** one-click rate refresh instead of manual entry only.
