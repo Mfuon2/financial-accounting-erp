@@ -461,6 +461,59 @@ Results cache for 5 minutes. Critical failures block most transaction workflows.
 
 ---
 
+### 28. Cash & Bank Management (Project.md Domain 1)
+
+- **Bank statement import**: a statement (bank account, statement date, opening/closing balance)
+  made up of **statement lines** (date, description, signed amount — positive is a deposit/credit
+  to the bank, negative a withdrawal/debit — reference). Import is a JSON array today; a full
+  CSV/OFX parsing pipeline is out of scope for this first cut.
+- **Matching**: each line is matched, manually or via a date/amount-tolerance auto-match, against
+  one or more existing `LedgerEntry` rows for the statement's bank account — never against a
+  duplicated copy of ledger data. A line's status is `UNMATCHED`, `MATCHED`, or `IGNORED`
+  (with a mandatory reason).
+- **Bank account validation**: the account a statement is imported against must be non-header,
+  active, and `AccountSubtype.CASH_AND_EQUIVALENTS` — enforced server-side, not just in the
+  frontend picker.
+- **Reconciliation tie-out report**: the standard two-sided bank-reconciliation identity —
+  `adjustedBookBalance = glBalance + bankOutstandingTotal` and
+  `adjustedBankBalance = closingBalance + glOutstandingTotal` — both reduce to the same figure when
+  every matched pair's amounts genuinely agree, so a non-zero difference is a real, surfaced gap,
+  never silently adjusted away. This module never posts a journal entry — it compares existing
+  ledger activity against a statement, it doesn't create new ledger activity.
+
+### 29. Expense Management / T&E (Project.md Domain 1)
+
+- **Expense claims**: an employee claim (employee, claim date, notes) made up of **claim lines**
+  (expense account, description, amount, date incurred, optional receipt reference — a plain
+  string/URL, not a full OCR/upload pipeline in this first cut).
+- **Lifecycle**: `DRAFT → SUBMITTED → APPROVED → REIMBURSED`, or `SUBMITTED → REJECTED → DRAFT`
+  (reopen for correction and resubmission, rather than cloning a new claim, since a rejected claim
+  never posted anything).
+- **Reimbursement posting**: on approval, posts a real, balanced journal entry — DR each line's
+  expense account (merged by account, so two lines against the same account produce one journal
+  line) / CR an Employee Reimbursements Payable account, reusing the existing `CURRENT_PAYABLE`
+  account subtype (IAS 1 §54(k) — an approved-but-unpaid employee reimbursement is a current
+  liability, economically identical in nature to a trade payable) rather than inventing a new one.
+- **Segregation of duties, two independent checks**: the nominal beneficiary (`employeeId`) may not
+  approve their own reimbursement, *and* the actual submitter (`createdBy`) may not approve a claim
+  they filed — the second check still applies even when the claim was filed under a different
+  employee's name (delegated submission — e.g. an assistant filing for an executive — stays
+  allowed; only the maker-checker identity, not the nominal claimant, is enforced at approval).
+
+### 30. Segregation of Duties — Maker-Checker (cross-cutting)
+
+Every approval action in the system — journal entry posting, invoice approval, bill approval, budget
+approval, and expense claim approval (see above) — requires that the approver be a **different
+person** from whoever created the record, not merely someone holding an approver-tier role. Role
+gating alone (`SENIOR_ACCOUNTANT`, `CONTROLLER_CFO`, etc.) never checked this: two users sharing the
+same role could otherwise approve each other's work, or worse, their own. Enforced by a single
+shared check (`SecurityUtils.requireNotSelfApproval`) compared against each record's
+audit-populated `createdBy` (Spring Data JPA auditing — never a client-suppliable field), reused
+everywhere rather than hand-rolled per module. The Global Approvals Queue (§19) inherits this
+automatically, since it routes to the same underlying service methods.
+
+---
+
 ## Architecture
 
 ```
@@ -500,8 +553,10 @@ com.qesuite.accounting
 ├── ap                 Period management and 9-step cycle controller
 ├── approvals          Global approvals aggregation queue
 ├── assets             IAS 16 fixed assets, depreciation, disposal
+├── banking            Bank statement import, GL matching, reconciliation tie-out
 ├── budgeting          Budgets, budget lines, budget-vs-actual variance reporting
 ├── coa                Chart of accounts, hierarchy, templates
+├── expenses           Expense claims, approval routing, reimbursement posting
 ├── fx                 Currencies, exchange rates, FX revaluation (IAS 21)
 ├── invoicing          Customer invoices, credit notes, AR lifecycle, IFRS 15
 ├── journal            Journal entries, adjustments, period closing
@@ -537,7 +592,9 @@ src/views
 ├── ledger        Chart of accounts, periods, journal entries, source documents
 ├── parties       Customers, suppliers
 ├── assets        Fixed asset register, depreciation run
+├── banking       Bank statement import and reconciliation
 ├── planning      Budgets and budget-vs-actual variance reporting
+├── expenses      Expense claims and approval routing
 ├── revenue       Invoices, credit notes, payments, receipts, AR ageing
 ├── payables      Vendor bills, AP ageing
 ├── period-end    Trial balance, period-end workflow, FX revaluation
