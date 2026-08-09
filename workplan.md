@@ -119,19 +119,19 @@ baseline with no unverified "unverified" critical bugs remaining.
   was pre-existing and app-wide, not Budgeting-specific — also fixed `ChartOfAccounts.vue`'s "Header"
   badge as a result). Remaining, non-blocking: OpenAPI docs not manually eyeballed (see MEMORY.md
   Handover, item 1).
-- [IN REVIEW, NOT YET MERGED] **Cash & Bank Management:** bank statement import, GL matching
-  (manual + date/amount-tolerance auto-match), reconciliation tie-out report. Built 2026-08-09 in
-  an isolated worktree (`677a838`/`0932d53`) — `com.qesuite.accounting.banking.*` (backend),
-  `fa-frontend/src/views/banking/BankReconciliation.vue` (frontend). Merged with latest `main`;
-  155/155 backend tests pass (only 2 known pre-existing failures), `npm run build` clean, IDOR and
-  reconciliation-math checks self-proven load-bearing by mutation testing. Found and fixed two of
-  its own real bugs along the way: a `LazyInitializationException`-class risk (same family as
-  `BudgetLine`/`InvoiceLine`) and a second, different instance of the same underlying problem — a
-  lazy field read after this app's `open-in-view: false` transaction had already closed — plus a
-  demo-mode COA-fixture gap (missing `accountSubtype`) blocking the `CASH_AND_EQUIVALENTS` account
-  filter. Live-verified in a browser, catching and fixing a KPI-grid overflow bug.
-  **Independent Financial Systems Architect review in progress — not yet merged into `main`,
-  not yet pushed.** See MEMORY.md for the review verdict once it lands.
+- [DONE] **Cash & Bank Management:** bank statement import, GL matching (manual +
+  date/amount-tolerance auto-match), reconciliation tie-out report. Built 2026-08-09 in an isolated
+  worktree (`677a838`/`0932d53`), merged into `main` (`e297632`) and pushed —
+  `com.qesuite.accounting.banking.*` (backend), `fa-frontend/src/views/banking/BankReconciliation.vue`
+  (frontend). 191/191 backend tests pass (only 2 known pre-existing failures), `npm run build`
+  clean. Independently reviewed — **APPROVED, no conditions** — reconciliation math, IDOR, the
+  `LazyInitializationException` fix, and account-picker validation all independently mutation-tested
+  and confirmed sound, not read-through. Found and fixed two of its own real bugs along the way: a
+  `LazyInitializationException`-class risk (same family as `BudgetLine`/`InvoiceLine`) and a second,
+  different instance of the same underlying problem — a lazy field read after this app's
+  `open-in-view: false` transaction had already closed — plus a demo-mode COA-fixture gap (missing
+  `accountSubtype`) blocking the `CASH_AND_EQUIVALENTS` account filter. Live-verified in a browser,
+  catching and fixing a KPI-grid overflow bug.
 - [DONE] **Expense Management (T&E):** employee expense claims, approval routing, reimbursement
   posting to the GL. Built 2026-08-09 in an isolated worktree, merged and pushed to `origin/main`
   (`139a10a`) — `com.qesuite.accounting.expenses.*` (backend),
@@ -151,7 +151,10 @@ baseline with no unverified "unverified" critical bugs remaining.
 
 **Exit criteria:** Domain 1 module checklist in Project.md fully covered; Accounting Architect signs
 off that Budgeting, Cash Management, and Expense Management follow the same posting-integrity rules
-as the existing core (balanced entries, immutability, audit trail).
+as the existing core (balanced entries, immutability, audit trail). **The sign-off half of this is
+now satisfied for all three** (see each item's own APPROVED verdict above) — Phase 1 itself is not
+yet complete, since historical snapshots, the FX rate feed, and the communication/delivery gaps
+remain fully unbuilt.
 
 ---
 

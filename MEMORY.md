@@ -248,50 +248,73 @@ failed by hitting an unmocked repository call instead of the expected exception,
 clean). `mvn clean test`: 127 tests at the time of this commit, same 2 known pre-existing failures.
 Merged at `8976e5a`, pushed.
 
-### Cash & Bank Management — Phase 1 item 2 — IN INDEPENDENT REVIEW, NOT YET MERGED
+### Cash & Bank Management — Phase 1 item 2 — DONE, merged, pushed
 
 `com.qesuite.accounting.banking.*` — bank statement import, GL matching (manual + a simple
 date/amount-tolerance auto-match), reconciliation tie-out report (`adjustedBookBalance =
 adjustedBankBalance`, the standard two-sided bank-rec identity). Never posts a journal entry — a
 comparison/reporting tool over existing ledger activity, same non-posting design as Budgeting.
-Built and merged with latest `main` in its own isolated worktree (commits `677a838`/`0932d53`);
-**155/155 backend tests pass** (only the 2 known pre-existing failures), `npm run build` clean.
+Built in its own isolated worktree (commits `677a838`/`0932d53`), merged into `main` (`e297632`,
+resolving three purely-additive merge conflicts with the parallel Expense Management module in
+`router/index.js`/`AppSidebar.vue`/`data/index.js` — both modules had added entries at the same
+insertion points) and pushed. **191/191 backend tests pass** (only the 2 known pre-existing
+failures), `npm run build` clean.
 
 Found and fixed two of its own real bugs during the build: (1) a `LazyInitializationException`-class
 risk it would have inherited from copying `BudgetLine`/`InvoiceLine`'s original shape (fixed before
 finishing, once flagged); (2) a *different* instance of the same underlying problem — this app runs
 `spring.jpa.open-in-view: false`, so a lazy field read after the read-only transaction closes throws
-the same way — fixed with a `JOIN FETCH` repository query. Also found a demo-mode-only gap (the COA
-fixture had no `accountSubtype` field at all, so no demo account could ever match a
-`CASH_AND_EQUIVALENTS` filter — same *class* of gap as the `isHeader` fix in the Budgeting handover
-above, found independently by a different agent). Live-verified in a real browser, catching and
-fixing a KPI-grid overflow bug along the way.
+the same way — fixed with a `JOIN FETCH` repository query (`BankStatementLineRepository.findByIdWithImport`).
+Also found a demo-mode-only gap (the COA fixture had no `accountSubtype` field at all, so no demo
+account could ever match a `CASH_AND_EQUIVALENTS` filter — same *class* of gap as the `isHeader` fix
+in the Budgeting handover above, found independently by a different agent). Live-verified in a real
+browser, catching and fixing a KPI-grid overflow bug along the way.
 
-**Independent Financial Systems Architect review was launched and hit a transient API disconnect
-mid-run — not a rejection.** Before disconnecting, it had already independently verified the
-reconciliation identity algebraically (`glBalance = matched + unmatchedGL`,
-`closingBalance = matched + unmatchedBank` ⟹ `adjustedBookBalance = adjustedBankBalance`, both equal
-`matched + unmatchedGL + unmatchedBank` — confirmed sound, not just plausible-looking). Resumed to
-complete the remaining checks (LazyInitializationException fixes, IDOR mutation test, account-picker
-validation, money discipline, and its own judgment on whether this module needs Agent-2-level review
-at all given it never posts a journal entry). **Check for the completed verdict before merging this
-module** — do not treat the partial pre-disconnect finding as a full approval.
+**Independent Financial Systems Architect review: APPROVED, no conditions.** (First attempt hit a
+transient API disconnect mid-run; resumed to completion — see below, this is the completed verdict.)
+Every claim independently verified by actually running things, not read-through: confirmed the
+155-test count directly; proved the reconciliation math is a genuine two-sided bank-rec identity
+(not coincidentally-correct-looking code) by deriving it algebraically AND by mutation-testing
+(flipped `.add`→`.subtract` on the adjustment formula, confirmed both reconciliation tests failed
+with wrong numbers, reverted, confirmed clean); confirmed `BankLineMatch` is a plain class with
+id-based `equals`/`hashCode` matching the established pattern (noted one cosmetic-only inconsistency:
+`BankStatementLine` has no explicit `equals`/`hashCode` override at all, which is safe since it never
+touches its lazy field, but not stylistically uniform — not fixed, not blocking); confirmed the
+`JOIN FETCH` fix is a genuine fix for a real reachable code path, not defensive-but-unnecessary code;
+mutation-tested the IDOR check on `match` (removed it, confirmed the cross-entity test failed 500
+instead of 403, reverted, confirmed clean); confirmed the `CASH_AND_EQUIVALENTS` account-picker
+validation is enforced server-side, not just in the frontend dropdown; confirmed money discipline
+(`HALF_EVEN`/scale 6) matches `BudgetService`'s convention. On whether this module needed
+Agent-2-level review at all given it never posts a journal entry: reviewer's own judgment was yes —
+"reconciliation" and "account balances" are both explicit CLAUDE.md §17 triggers, and the accounting
+judgment involved (sign conventions, treating `IGNORED` lines as still counting toward the tie-out
+rather than silently excluding them, which side each outstanding total adjusts) is exactly the kind
+of subtlety an engineer could get backward without independent accounting confirmation — this
+review discharged that gate, it wasn't satisfiable by engineering self-review alone.
 
-### What a future agent should do once the Cash & Bank review lands
+Both isolated worktrees (`agent-a31b4f89eb4373724`, `agent-aad07028cec60e4cc`) and their branches
+have been removed post-merge — nothing left to clean up.
 
-1. Read the review's full verdict. If APPROVED (with or without conditions that are then satisfied),
-   merge `worktree-agent-a31b4f89eb4373724` into `main` (same pattern as Expense Management: run
-   `mvn clean test` + `npm run build` in the worktree first, merge, re-verify on `main`, push).
-2. Update this file's Current Sprint/Milestone and `workplan.md`'s Phase 1 entry for Cash & Bank
-   Management from "IN REVIEW" to "DONE" once merged.
-3. Update `README.md`'s module inventory for all three new modules (Budgeting, Expense Management,
-   Cash & Bank Management) — still not done for any of them (CLAUDE.md §12 requirement, tracked as
-   open since the Budgeting handover).
-4. Remaining real Phase 1 items, still fully unbuilt: historical period-balance snapshots, external
+### What a future agent should do next
+
+1. **README.md's module inventory still not updated** for any of the three new Phase 1 modules
+   (Budgeting, Expense Management, Cash & Bank Management) — CLAUDE.md §12 requirement, open since
+   the Budgeting handover, still open now. Do this before starting new feature work.
+2. Remaining real Phase 1 items, still fully unbuilt: historical period-balance snapshots, external
    FX rate feed integration, communication/document-delivery gaps.
-5. Clean up the two isolated worktrees (`.claude/worktrees/agent-a31b4f89eb4373724`,
-   `.claude/worktrees/agent-aad07028cec60e4cc`) once merged — they're gitignored now (see `.gitignore`
-   fix) but still take up disk space until removed (`git worktree remove <path>`).
+3. OpenAPI/Swagger docs not manually eyeballed for any of the three new modules — annotations are in
+   place following established patterns, but nobody has loaded `/docs` and checked the rendered
+   schema. Quick check, not done for any of the three.
+4. **Not re-audited: does `accounts.js`'s `isHeader`/`accountSubtype` gap have other siblings?** Two
+   independent agents found two different instances of "demo-mode API client silently defaults a
+   field a real consumer filters on" today (`isHeader` in the Budgeting handover, `accountSubtype`
+   here). Worth a deliberate sweep of every `src/api/*.js` demo-mode mapping function against what
+   its real consumers actually filter/branch on, rather than waiting for a third accidental find.
+5. **Not re-audited: does `BankStatementLine`'s missing `equals`/`hashCode` override have siblings?**
+   Every entity fixed for the `LazyInitializationException` risk (`BudgetLine`, `InvoiceLine`,
+   `BankLineMatch`) got an explicit id-based override; entities that never held a lazy back-reference
+   in the first place (like `BankStatementLine`) were never required to, but doing so anyway would
+   be a reasonable consistency pass if anyone touches entity design conventions next.
 
 ---
 
