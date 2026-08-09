@@ -438,4 +438,53 @@ class JournalServiceTest {
         // Repository save must NOT be called for an immutable record
         verify(exactly = 0) { journalEntryRepository.save(any()) }
     }
+
+    // -------------------------------------------------------------------------
+    // Maker-checker (segregation of duties)
+    // -------------------------------------------------------------------------
+
+    @org.junit.jupiter.api.AfterEach
+    fun clearSecurityContext() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext()
+    }
+
+    private fun authenticateAs(userId: UUID) {
+        val principal = com.qesuite.accounting.shared.security.UserContext(
+            userId = userId, entityId = entityId,
+            role = com.qesuite.accounting.shared.security.UserRole.SENIOR_ACCOUNTANT, email = "u@example.com",
+        )
+        org.springframework.security.core.context.SecurityContextHolder.getContext().authentication =
+            org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal, null, emptyList())
+    }
+
+    @Test
+    fun `postEntry rejects the preparer approving their own journal entry`() {
+        val entryId = UUID.randomUUID()
+        val userId = UUID.randomUUID()
+        val entry = entryWithTwoBalancedLines(status = JournalEntryStatus.PENDING_APPROVAL)
+        entry.createdBy = userId
+        every { journalEntryRepository.findById(entryId) } returns Optional.of(entry)
+        authenticateAs(userId)
+
+        val ex = assertThrows<com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException> {
+            journalService.postEntry(entryId)
+        }
+        assertEquals("SELF_APPROVAL_NOT_ALLOWED", ex.errorCode)
+    }
+
+    @Test
+    fun `postEntry allows a different user to post an entry they did not create`() {
+        val entryId = UUID.randomUUID()
+        val entry = entryWithTwoBalancedLines(status = JournalEntryStatus.PENDING_APPROVAL)
+        entry.createdBy = UUID.randomUUID()
+        every { journalEntryRepository.findById(entryId) } returns Optional.of(entry)
+        every { doubleEntryValidator.validate(entry) } returns Unit
+        every { postingService.postJournalEntry(entry) } returns Unit
+        every { journalEntryRepository.save(any()) } answers { firstArg() }
+        authenticateAs(UUID.randomUUID())
+
+        val result = journalService.postEntry(entryId)
+
+        assertEquals(JournalEntryStatus.POSTED, result.status)
+    }
 }

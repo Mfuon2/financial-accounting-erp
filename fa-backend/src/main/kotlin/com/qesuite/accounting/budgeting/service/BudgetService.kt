@@ -23,6 +23,7 @@ import com.qesuite.accounting.shared.audit.domain.AuditAction
 import com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
+import com.qesuite.accounting.shared.security.SecurityUtils
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -134,6 +135,9 @@ class BudgetService(
                 context = mapOf("budget_id" to id, "current_status" to budget.status.name),
             )
         }
+        // Segregation of duties — the preparer cannot also be the approver.
+        SecurityUtils.requireNotSelfApproval(budget.createdBy)
+
         budget.status = BudgetStatus.APPROVED
         return budgetRepository.save(budget)
     }
