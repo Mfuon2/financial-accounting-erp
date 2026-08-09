@@ -353,6 +353,40 @@ class ExpenseClaimServiceTest {
         verify(exactly = 0) { journalService.createEntry(any()) }
     }
 
+    // ── maker-checker (segregation of duties) — separate from the employeeId check above.
+    // That one guards the nominal beneficiary approving their own reimbursement; this one
+    // guards the actual submitter (createdBy) rubber-stamping their own work regardless of
+    // whose name is on the claim (delegated submission stays allowed). See MEMORY.md.
+
+    @org.junit.jupiter.api.AfterEach
+    fun clearSecurityContext() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext()
+    }
+
+    private fun authenticateAs(userId: UUID) {
+        val principal = com.qesuite.accounting.shared.security.UserContext(
+            userId = userId, entityId = entityId,
+            role = com.qesuite.accounting.shared.security.UserRole.SENIOR_ACCOUNTANT, email = "u@example.com",
+        )
+        org.springframework.security.core.context.SecurityContextHolder.getContext().authentication =
+            org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal, null, emptyList())
+    }
+
+    @Test
+    fun `approve rejects the actual submitter approving their own claim even when filed on another employee's behalf`() {
+        // Delegated submission: claim.employeeId is a DIFFERENT person than the one who actually
+        // created it (createdBy) — proving the old employeeId check alone would NOT catch this.
+        val submitterId = UUID.randomUUID()
+        val (claim, _, _) = submittedClaimWithLines(employeeId = UUID.randomUUID())
+        claim.createdBy = submitterId
+        every { expenseClaimRepository.findById(claim.id) } returns Optional.of(claim)
+        authenticateAs(submitterId)
+
+        val ex = assertThrows<BusinessRuleViolationException> { service.approve(claim.id, UUID.randomUUID()) }
+        assertEquals("SELF_APPROVAL_NOT_ALLOWED", ex.errorCode)
+        verify(exactly = 0) { journalService.createEntry(any()) }
+    }
+
     @Test
     fun `approve rejects a claim that is not SUBMITTED`() {
         val claim = ExpenseClaim(entityId = entityId, employeeId = UUID.randomUUID(), claimDate = LocalDate.now(), status = ExpenseClaimStatus.DRAFT)

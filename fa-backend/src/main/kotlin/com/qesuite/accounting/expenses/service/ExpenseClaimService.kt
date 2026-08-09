@@ -24,6 +24,7 @@ import com.qesuite.accounting.shared.audit.domain.AuditAction
 import com.qesuite.accounting.shared.exceptions.BusinessRuleViolationException
 import com.qesuite.accounting.shared.exceptions.ResourceNotFoundException
 import com.qesuite.accounting.shared.exceptions.ValidationException
+import com.qesuite.accounting.shared.security.SecurityUtils
 import com.qesuite.accounting.users.repository.UserRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -216,6 +217,14 @@ class ExpenseClaimService(
                 context = mapOf("claim_id" to id, "employee_id" to claim.employeeId),
             )
         }
+        // Maker-checker (segregation of duties) — separate from the check above. That one
+        // guards the nominal *beneficiary* (employeeId) approving their own reimbursement;
+        // this one guards the actual *submitter* (createdBy) rubber-stamping their own work,
+        // regardless of whose name is on the claim. Delegated submission (one person filing on
+        // another's behalf) stays allowed — this only blocks the same person from being both
+        // maker and checker. See SecurityUtils.requireNotSelfApproval and MEMORY.md for the
+        // codebase-wide rollout this closes the last gap in.
+        SecurityUtils.requireNotSelfApproval(claim.createdBy)
 
         val period = try {
             periodService.findPeriodForDate(claim.entityId, claim.claimDate)
